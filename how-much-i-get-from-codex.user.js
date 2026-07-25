@@ -388,6 +388,9 @@
 
   const usd = (c) => "$" + (c * USD_PER_CREDIT).toFixed(2);
   const int = (v) => Math.round(v).toLocaleString("en-US");
+  // Turns are split across a model's speed rows by token share, so a row can hold a
+  // fraction of one. Rounding that to "0" beside a real per-turn price reads as a bug.
+  const turnCount = (v) => (v > 0 && v < 0.5 ? "<1" : int(v));
   const pct = (x) => (x * 100).toFixed(1) + "%";
 
   const tokenCount = (v) => {
@@ -774,7 +777,7 @@
       cards.push({
         label: L.cPriciestTurnDay,
         value: usd(dearestTurnDay.credits / dearestTurnDay.turns),
-        sub: `${shortDate(dearestTurnDay.date)} · ${int(dearestTurnDay.turns)} turns`,
+        sub: `${shortDate(dearestTurnDay.date)} · ${turnCount(dearestTurnDay.turns)} turns`,
       });
     }
 
@@ -896,18 +899,16 @@
     if (!state.ent) return null;
 
     const W = state.win ? state.win.windowSec * 1000 : 0;
-    if (!W || W < DAY_MS / 24) return null;
+    if (!W) return null;
 
     const p = periodRange();
-    const CAP = 400; // a year of 5-hour windows, and a hard stop on any bad clock
 
-    let past = 0;
-    for (let open = state.win.startAt; open > p.startMs && past < CAP; open -= W) past++;
+    // Counted arithmetically rather than by stepping, so no loop bound can quietly become a
+    // bound on the answer. An opening landing exactly on the period start is not counted
+    // here — it is the window already running when the period began, added once below.
+    const past = state.win.startAt > p.startMs ? Math.ceil((state.win.startAt - p.startMs) / W) : 0;
+    const ahead = p.endMs > state.win.resetAt ? Math.ceil((p.endMs - state.win.resetAt) / W) : 0;
 
-    let ahead = 0;
-    for (let open = state.win.resetAt; open < p.endMs && ahead < CAP; open += W) ahead++;
-
-    // Plus the one already running when the period began.
     return { windows: past + ahead + 1, resets: past + ahead, ...p };
   }
 
@@ -966,13 +967,12 @@
     if (!state.win || !r || !state.win.inferable) return null;
 
     const W = state.win.windowSec * 1000;
-    const currentFrom = dayKey(state.win.startAt);
-    const dayBeforeCurrent = addDays(currentFrom, -1);
 
     /*
      * A window opening mid-day shares that day with the window before it, and a day bucket
-     * cannot be split. The boundary day goes to the current cycle, and earlier segments stop
-     * the day before — otherwise the same spend is counted in two cycles at once.
+     * cannot be split. One rule, applied at every boundary: the opening day belongs to the
+     * newer window, so each segment stops the day before the next one opens. Anything less
+     * uniform double-counts the shared day between whichever pair it forgot about.
      *
      * A segment counts as trusted only if all of its days were actually fetched. An
      * uncovered segment would report a partial sum as a whole cycle, and that segment is
@@ -982,8 +982,7 @@
     for (let k = 1; k <= 8; k++) {
       const start = state.win.startAt - k * W;
       const fromKey = dayKey(start);
-      const lastDay = dayKey(start + W - 1);
-      const toKey = lastDay > dayBeforeCurrent ? dayBeforeCurrent : lastDay;
+      const toKey = addDays(dayKey(start + W), -1);
       if (toKey < fromKey) break;
 
       const covered = !!state.fetchedFrom && fromKey >= state.fetchedFrom;
@@ -1314,7 +1313,11 @@
         ${r.ceiling ? `<span><b class="inf">${usd(remaining)}</b> ${esc(L.leftSuffix(pct(1 - ratio)))}</span>` : ""}
         <span>${esc(L.windowSpan(clock(win.startAt), clock(win.resetAt)))}</span>
         <span>${esc(L.resetInPre)} <b>${Math.max(0, (win.resetAt - now) / DAY_MS).toFixed(1)}</b> ${esc(L.resetInPost)}</span>
-        <span><b>${usd(perDay)}</b>${esc(L.perDaySuffix)}</span>
+        ${
+          /* A per-day rate needs at least a day of window to divide by. On a 5-hour window
+             the whole day's spend would be attributed to a fraction of a day. */
+          win.inferable ? `<span><b>${usd(perDay)}</b>${esc(L.perDaySuffix)}</span>` : ""
+        }
       </div>
     `;
   }
@@ -1341,14 +1344,17 @@
      * two are usually within a few percent of each other and the reader was left doing the
      * subtraction. Stated as a share of the allowance it says the thing directly.
      */
+    /*
+     * You cannot use more than you were granted, so the expectation is capped at the
+     * allowance — a past cycle can out-spend the inferred ceiling (the shared pool makes the
+     * ceiling read low), and an uncapped figure would print "$700 of it — 100.0%" under a
+     * $650 headline.
+     */
+    const expected = proj.ceiling == null ? 0 : Math.min(proj.expected, proj.allowance);
     const onPace =
       proj.ceiling != null && proj.basisIsLastFull && proj.allowance > 0
         ? `<div class="readout"><span>${esc(
-            L.onPaceInline(
-              usd(proj.expected),
-              pct(Math.min(1, proj.expected / proj.allowance)),
-              shortDate(dayKey(proj.seg.lastFull.end)),
-            ),
+            L.onPaceInline(usd(expected), pct(expected / proj.allowance), shortDate(dayKey(proj.seg.lastFull.end))),
           )}</span></div>`
         : "";
 
@@ -1394,6 +1400,8 @@
       rows.push([span(p.start, p.end), L.cyclePast, p.spend > 0 ? usd(p.spend) : "—", "past"]);
     }
 
+    // Only this row and the projected ones carry markup, and every value in them comes from
+    // usd(). Nothing API-derived may be routed through the amount column without escaping it.
     rows.push([
       span(seg.current.start, seg.current.end),
       L.cycleNow,
@@ -1576,7 +1584,7 @@
               <td>${esc(m.name)}</td>
               <td class="n strong">${usd(m.credits)}</td>
               <td class="n">${pct(m.credits / (s.credits || 1))}</td>
-              <td class="n">${m.turns ? esc(int(m.turns)) : "—"}</td>
+              <td class="n">${m.turns ? esc(turnCount(m.turns)) : "—"}</td>
               <td class="n">${m.turns ? usd(m.credits / m.turns) : "—"}</td>
               <td class="n">${tokenCount(m.tokens)}</td>
             </tr>`,

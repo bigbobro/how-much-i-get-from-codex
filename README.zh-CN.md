@@ -171,6 +171,8 @@ python3 -m http.server 8731
 | `smoketest.html#fresh` | 周期刚重置，已用 0% | 自动落到订阅视图 |
 | `smoketest.html#hourly` | 5 小时窗口 | 拒绝推算额度，并说明原因 |
 | `smoketest.html#fast` | fast mode，含一个没公布倍率的模型 | 2.5× 生效，另一个被标注 |
+| `smoketest.html#boundary` | 窗口在 06:00 UTC 开，用量落在两个分段争抢的那天 | 分段精确切分，没有哪一天被数两遍 |
+| `smoketest.html#noent` | `accounts/check` 失败，拿不到续费日期 | 退回自然月，不再宣称任何账期口径 |
 
 第一条是真正要守住的回归测试：那天是真实用量，$250.00 是它应该复现出来的额度。
 

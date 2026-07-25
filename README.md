@@ -188,6 +188,8 @@ python3 -m http.server 8731
 | `smoketest.html#fresh` | cycle just reset, 0% used | lands on the subscription view |
 | `smoketest.html#hourly` | 5-hour window | refuses to infer a ceiling, and says why |
 | `smoketest.html#fast` | fast-mode rows, one with no published multiplier | 2.5× applied, the other flagged |
+| `smoketest.html#boundary` | windows open at 06:00 UTC, spend on days two segments compete for | segments partition the days exactly — no day counted twice |
+| `smoketest.html#noent` | `accounts/check` fails, no renewal date | falls back to the calendar month, drops every billing-period claim |
 
 The first case is the regression test that matters: the recorded day is real usage, and
 $250.00 is the ceiling it should reproduce.

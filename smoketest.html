@@ -11,11 +11,14 @@ the real script would never have fetched.</p>
 <ul>
   <li><a href="#">default</a> — 30.4-day window, 99.93% used, the single recorded real day.
       Expect <b>$249.83 spent / $250.00 ceiling</b>. This is the regression test that matters.</li>
-  <li><a href="#multi">#multi</a> — 7-day window, completed cycles before this one, renewal 24 days out.
-      Exercises the cycle strip, the pace basis and the multi-opening projection.</li>
+  <li><a href="#multi">#multi</a> — 7-day window, renewal 24 days out. One completed cycle shows; the older
+      rows are correctly clipped away as never-fetched. Exercises the strip, the pace basis
+      and the multi-opening projection.</li>
   <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Should land on the subscription view.</li>
   <li><a href="#hourly">#hourly</a> — 5-hour window. Must refuse to infer a ceiling and say why.</li>
   <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
+  <li><a href="#boundary">#boundary</a> — windows open at 06:00 UTC, spend sits on days two
+      segments compete for. Segment totals must not exceed the total spend.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
       Must fall back to the calendar month and drop every billing-period claim.</li>
 </ul>
@@ -27,9 +30,12 @@ the real script would never have fetched.</p>
 const MODE = location.hash.replace("#", "") || "default";
 const DAY = 86400000;
 
-// Pinned to noon UTC today: the boundary-day behaviour must not depend on what time
-// of day the test is run, and fixtures must not expire on a hardcoded date.
-const NOW = Date.parse(new Date().toISOString().slice(0, 10) + "T12:00:00Z");
+// Two clocks on purpose. Windows are anchored to the real clock, because the script reads
+// Date.now() and a window that "opens" in the future would be a fiction. Usage days are
+// anchored to a fixed hour so the day grid — and with it the boundary-day behaviour — does
+// not change shape depending on what time the test is run. Nothing expires on a hard date.
+const NOW = Date.now();
+const NOON = Date.parse(new Date().toISOString().slice(0, 10) + "T12:00:00Z");
 const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 /* ── recorded shapes ────────────────────────────────────────────────────
@@ -109,43 +115,57 @@ if (MODE === "multi") {
   USED_PERCENT = 26;
   RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
   DAYS = [
-    { at: NOW - 13 * DAY, k: 0.20, turns: 9,  threads: 2 },
-    { at: NOW - 11 * DAY, k: 0.35, turns: 14, threads: 3 },
-    { at: NOW -  6 * DAY, k: 0.28, turns: 11, threads: 2 },
-    { at: NOW -  4 * DAY, k: 0.44, turns: 19, threads: 4 },
-    { at: NOW -  1 * DAY, k: 0.26, turns: 10, threads: 2 },
+    { at: NOON - 13 * DAY, k: 0.20, turns: 9,  threads: 2 },
+    { at: NOON - 11 * DAY, k: 0.35, turns: 14, threads: 3 },
+    { at: NOON -  6 * DAY, k: 0.28, turns: 11, threads: 2 },
+    { at: NOON -  4 * DAY, k: 0.44, turns: 19, threads: 4 },
+    { at: NOON -  1 * DAY, k: 0.26, turns: 10, threads: 2 },
   ];
 } else if (MODE === "fresh") {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor(NOW / 1000);
   USED_PERCENT = 0;
   RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
-  DAYS = [{ at: NOW - 3 * DAY, k: 1, turns: 17, threads: 3 }];
+  DAYS = [{ at: NOON - 3 * DAY, k: 1, turns: 17, threads: 3 }];
 } else if (MODE === "hourly") {
   WINDOW_SEC = 5 * 3600;
   WINDOW_START = Math.floor((NOW - 2 * 3600000) / 1000);
   USED_PERCENT = 48;
   RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
-  DAYS = [{ at: NOW, k: 0.3, turns: 6, threads: 1 }];
+  DAYS = [{ at: NOON, k: 0.3, turns: 6, threads: 1 }];
 } else if (MODE === "fast") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
   USED_PERCENT = 40;
   RENEWS_AT = new Date(NOW + 12 * DAY).toISOString();
-  DAYS = [{ at: NOW - 1 * DAY, k: 1, turns: 12, threads: 3 }];
+  DAYS = [{ at: NOON - 1 * DAY, k: 1, turns: 12, threads: 3 }];
   MODELS_FOR = () => FAST_MODELS;
+} else if (MODE === "boundary") {
+  // Windows open at 06:00 UTC, so every boundary falls mid-day and adjacent segments
+  // compete for the same day bucket. Spend is placed on the day two boundaries back.
+  WINDOW_SEC = 7 * 86400;
+  const open6 = Date.parse(new Date(NOW).toISOString().slice(0, 10) + "T06:00:00Z");
+  WINDOW_START = Math.floor((open6 - 1 * DAY) / 1000);
+  USED_PERCENT = 30;
+  RENEWS_AT = new Date(NOW + 5 * DAY).toISOString();
+  DAYS = [
+    { at: open6 - 15 * DAY, k: 0.30, turns: 12, threads: 3 },  // shared past↔past boundary day
+    { at: open6 -  8 * DAY, k: 0.25, turns: 10, threads: 2 },  // shared boundary day, k=1↔k=2
+    { at: open6 -  4 * DAY, k: 0.20, turns: 8,  threads: 2 },
+    { at: open6,               k: 0.15, turns: 6,  threads: 1 },  // inside the current cycle
+  ];
 } else if (MODE === "noent") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
   USED_PERCENT = 55;
   RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
-  DAYS = [{ at: NOW - 2 * DAY, k: 0.5, turns: 8, threads: 2 }];
+  DAYS = [{ at: NOON - 2 * DAY, k: 0.5, turns: 8, threads: 2 }];
 } else {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor((NOW - 15 * DAY) / 1000);
   USED_PERCENT = 99.93;
   RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
-  DAYS = [{ at: NOW - 3 * DAY, k: 1, turns: 17, threads: 3 }];
+  DAYS = [{ at: NOON - 3 * DAY, k: 1, turns: 17, threads: 3 }];
 }
 
 const modelsFor = MODELS_FOR || ((d) => scale(REAL_MODELS, d.k));
