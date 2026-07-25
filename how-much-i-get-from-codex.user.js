@@ -164,6 +164,7 @@
       costPlaceholder: "e.g. 30",
 
       periodTotal: "used this subscription period",
+      monthTotal: "used this calendar month",
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "Measured over the real billing period, not the calendar month. The allowance resets on its own clock, so the billing period is the honest answer to what one payment buys.",
@@ -298,6 +299,7 @@
       costPlaceholder: "比如 30",
 
       periodTotal: "本期订阅已用掉",
+      monthTotal: "本自然月已用掉",
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "按真实账期算，不按自然月。额度按自己的时钟重置，所以「一次付费到底买到了什么」，只有账期这把尺子答得准。",
@@ -828,6 +830,8 @@
 
   const monthlyCost = () => Number(localStorage.getItem(COST_KEY)) || 0;
 
+  let wasOpen = false;
+
   /*
    * Step back whole months without letting the day of the month overflow. Plain
    * setUTCMonth(-1) turns a renewal on the 30th of March into "30 February", which JavaScript
@@ -887,6 +891,10 @@
    * An extra reset would mean more openings, not fewer, so this is a floor.
    */
   function periodAllowances() {
+    // Without a renewal date there is no billing period, and counting allowances "per
+    // payment" would be a claim about something we cannot see.
+    if (!state.ent) return null;
+
     const W = state.win ? state.win.windowSec * 1000 : 0;
     if (!W || W < DAY_MS / 24) return null;
 
@@ -1437,7 +1445,7 @@
     return `
       <div class="gauge-head">
         <div>
-          <div class="eyebrow">${esc(L.measured)} · ${esc(L.periodTotal)}</div>
+          <div class="eyebrow">${esc(L.measured)} · ${esc(p.isBilling ? L.periodTotal : L.monthTotal)}</div>
           <div class="amount">${usd(s.credits)}</div>
         </div>
         ${
@@ -1734,9 +1742,14 @@
       else render();
     };
 
-    // Move focus into the dialog on open, so Escape and Tab land where the reader is looking.
+    /*
+     * Move focus into the dialog when it opens — but only then. Every render replaces the
+     * whole shadow root, so focusing on each one would yank a keyboard user back to the
+     * dialog root every time they switch view or language.
+     */
     const panel = root.querySelector(".panel");
-    if (panel && state.open && !root.contains(root.getRootNode().activeElement)) panel.focus();
+    if (panel && state.open && !wasOpen) panel.focus();
+    wasOpen = state.open;
 
     root.querySelectorAll("[data-view]").forEach((b) => {
       b.onclick = () => {

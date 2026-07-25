@@ -137,6 +137,10 @@ and Tampermonkey will follow `@updateURL` from there.
 
 Interface language follows your browser and can be switched in the panel.
 
+One caveat: `@match` fires on page load. If you reach Analytics by clicking through the
+settings sidebar the page never reloads, so the trigger will not appear — reload once and it
+is there.
+
 ---
 
 ## Known biases, and which way they point
@@ -146,7 +150,7 @@ with them in mind.
 
 | Source | Direction |
 |---|---|
-| **Credits-to-dollars rate** is set at 1 credit = $0.04 (1000 credits = $40). OpenAI has never published it; this comes from the credit purchase page | If the rate is wrong, every dollar figure scales with it. Change `USD_PER_CREDIT` at the top of the script |
+| **Credits-to-dollars rate** is set at 1 credit = $0.04 (1000 credits = $40). This figure is author-supplied and does not appear anywhere in OpenAI's published documentation — the rate card and the pricing page both omit it. It is at least self-consistent: 125 credits × $0.04 is $5 per 1M input tokens, the flagship list price | If the rate is wrong, every dollar figure scales with it. Change `USD_PER_CREDIT` at the top of the script |
 | **Cycle boundaries do not align with days.** The window opens at a precise timestamp, but usage is only bucketed by whole UTC days, and the API rejects `group_by=hour` | The first day is over-counted, so **spend reads high and the ceiling reads high**. The panel flags this when it happens |
 | **The pool is shared.** Codex, ChatGPT Work and ChatGPT for Excel draw on the same allowance, but this API only sees Codex | **Spend reads low, so the ceiling reads low** |
 | **The used percentage is coarse** — the API reports it to the integer | At 1% used the inferred ceiling is meaningless. Above 50% it is worth trusting |

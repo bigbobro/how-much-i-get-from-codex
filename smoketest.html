@@ -16,6 +16,8 @@ the real script would never have fetched.</p>
   <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Should land on the subscription view.</li>
   <li><a href="#hourly">#hourly</a> — 5-hour window. Must refuse to infer a ceiling and say why.</li>
   <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
+  <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
+      Must fall back to the calendar month and drop every billing-period claim.</li>
 </ul>
 <p><small>Switching hash needs a reload — the scenario is read once at start-up.</small></p>
 
@@ -132,6 +134,12 @@ if (MODE === "multi") {
   RENEWS_AT = new Date(NOW + 12 * DAY).toISOString();
   DAYS = [{ at: NOW - 1 * DAY, k: 1, turns: 12, threads: 3 }];
   MODELS_FOR = () => FAST_MODELS;
+} else if (MODE === "noent") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
+  USED_PERCENT = 55;
+  RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
+  DAYS = [{ at: NOW - 2 * DAY, k: 0.5, turns: 8, threads: 2 }];
 } else {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor((NOW - 15 * DAY) / 1000);
@@ -207,7 +215,12 @@ window.fetch = (url) => {
   if (u.includes("daily-skill-usage-metrics")) return reply(clip(SKILLS, u));
   if (u.includes("daily-plugin-usage-metrics")) return reply(clip(PLUGINS, u));
   if (u.includes("code-attribution")) return reply(clip(ATTRIBUTION, u));
-  if (u.includes("/accounts/check")) return reply(CHECK);
+  if (u.includes("/accounts/check")) {
+    // The entitlement call is optional; the panel must degrade rather than lie about a
+    // billing period it cannot see.
+    if (MODE === "noent") return Promise.resolve(new Response("nope", { status: 403 }));
+    return reply(CHECK);
+  }
   if (u.includes("/wham/usage")) return reply(USAGE);
   return Promise.reject(new Error("no stub for " + u));
 };
