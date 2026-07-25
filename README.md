@@ -125,9 +125,15 @@ Fast mode multiplies the rate: **2.5×** for GPT-5.6 and 5.5, **2×** for GPT-5.
 
 ## Install
 
+This repository is private, so the usual one-click raw link will not resolve. Install it by hand:
+
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
-2. Install the script: **[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)**
+2. Open the Tampermonkey dashboard, create a new script, and paste in
+   [`how-much-i-get-from-codex.user.js`](how-much-i-get-from-codex.user.js)
 3. Open <https://chatgpt.com/codex/cloud/settings/analytics> and click the label in the corner
+
+If the repository is ever made public, a raw link to the `.user.js` file installs in one click,
+and Tampermonkey will follow `@updateURL` from there.
 
 Interface language follows your browser and can be switched in the panel.
 

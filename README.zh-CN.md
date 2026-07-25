@@ -112,9 +112,14 @@ Fast mode 另算倍率：GPT-5.6 / 5.5 是 **2.5×**，GPT-5.4 是 **2×**
 
 ## 安装
 
+这个仓库是私有的，平时那种一键 raw 链接打不开，手动装：
+
 1. 装 [Tampermonkey](https://www.tampermonkey.net/)
-2. 装脚本：**[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)**
+2. 打开 Tampermonkey 面板，新建脚本，把
+   [`how-much-i-get-from-codex.user.js`](how-much-i-get-from-codex.user.js) 的内容粘进去
 3. 打开 <https://chatgpt.com/codex/cloud/settings/analytics>，点角落里那个标签
+
+以后如果把仓库转成公开，raw 链接就能一键安装，Tampermonkey 也会顺着 `@updateURL` 自动更新。
 
 界面语言跟随浏览器，也可以在面板里切。
 
