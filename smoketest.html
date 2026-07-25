@@ -1,0 +1,217 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>How Much I Get · smoke test</title>
+<body style="font:14px/1.6 system-ui;padding:28px;max-width:64ch">
+
+<h3>Smoke test harness</h3>
+<p>Replays recorded API responses at the script with no network and no login.
+The stub honours <code>start_date</code> / <code>end_date</code>, so a scenario cannot show data
+the real script would never have fetched.</p>
+
+<ul>
+  <li><a href="#">default</a> — 30.4-day window, 99.93% used, the single recorded real day.
+      Expect <b>$249.83 spent / $250.00 ceiling</b>. This is the regression test that matters.</li>
+  <li><a href="#multi">#multi</a> — 7-day window, completed cycles before this one, renewal 24 days out.
+      Exercises the cycle strip, the pace basis and the multi-opening projection.</li>
+  <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Should land on the subscription view.</li>
+  <li><a href="#hourly">#hourly</a> — 5-hour window. Must refuse to infer a ceiling and say why.</li>
+  <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
+</ul>
+<p><small>Switching hash needs a reload — the scenario is read once at start-up.</small></p>
+
+<div id="client-bootstrap" style="display:none">{"accessToken":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.sig"}</div>
+
+<script>
+const MODE = location.hash.replace("#", "") || "default";
+const DAY = 86400000;
+
+// Pinned to noon UTC today: the boundary-day behaviour must not depend on what time
+// of day the test is run, and fixtures must not expire on a hardcoded date.
+const NOW = Date.parse(new Date().toISOString().slice(0, 10) + "T12:00:00Z");
+const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/* ── recorded shapes ────────────────────────────────────────────────────
+   The three model rows are verbatim from the live API for 2026-07-22.     */
+const REAL_MODELS = [
+  { model: "gpt-5.6-sol",  speed: "standard", credits: 0, on_demand_credits: 0,
+    uncached_text_input_tokens: 10419070, cached_text_input_tokens: 309104640,
+    text_output_tokens: 1414986, text_total_tokens: 320938696 },
+  { model: "gpt-5.4",      speed: "standard", credits: 0, on_demand_credits: 0,
+    uncached_text_input_tokens: 107683, cached_text_input_tokens: 347008,
+    text_output_tokens: 4831, text_total_tokens: 459522 },
+  { model: "gpt-5.4-mini", speed: "standard", credits: 0, on_demand_credits: 0,
+    uncached_text_input_tokens: 369623, cached_text_input_tokens: 17664,
+    text_output_tokens: 5347, text_total_tokens: 392634 },
+];
+
+const scale = (models, k) => models.map(m => ({
+  ...m,
+  uncached_text_input_tokens: Math.round(m.uncached_text_input_tokens * k),
+  cached_text_input_tokens: Math.round(m.cached_text_input_tokens * k),
+  text_output_tokens: Math.round(m.text_output_tokens * k),
+  text_total_tokens: Math.round(m.text_total_tokens * k),
+}));
+
+const sum = (models, f) => models.reduce((a, m) => a + m[f], 0);
+
+const breakdownRow = (date, models) => ({
+  date,
+  product_surface_usage_values: { cli: 0, vscode: 0, web: 0, unknown: 0 },
+  premium_usage_values: {
+    total_usage_credits: { cli: 0 },
+    credit_usage_credits: { cli: 0 },
+    uncached_text_input_tokens_by_surface: { cli: sum(models, "uncached_text_input_tokens") },
+    cached_text_input_tokens_by_surface:   { cli: sum(models, "cached_text_input_tokens") },
+    text_output_tokens_by_surface:         { cli: sum(models, "text_output_tokens") },
+    text_total_tokens_by_surface:          { cli: sum(models, "text_total_tokens") },
+  },
+  models,
+});
+
+// Reproduces the real two-shape models[]: an activity record carrying turns, and a
+// token-shaped record for the same model carrying none. Building a Map from pairs over
+// this array silently loses the turn count — that is the bug this shape exists to catch.
+const countsRow = (date, turns, threads) => ({
+  date,
+  totals: { users: 1, threads, turns, credits: 0, on_demand_credits: 0 },
+  clients: [{ client_id: "CODEX_CLI", users: 1, threads, turns }],
+  models: [
+    { model: "gpt-5.4",      credits: 0, users: 1, threads: 1, turns: Math.max(1, Math.round(turns * 0.06)) },
+    { model: "gpt-5.4-mini", credits: 0, users: 1, threads: 1, turns: Math.max(1, Math.round(turns * 0.18)) },
+    { model: "gpt-5.6-sol",  credits: 0, users: 1, threads: Math.max(1, threads - 1), turns: Math.round(turns * 0.76) },
+    { model: "gpt-5.6-sol",  speed: "standard", credits: 0,
+      uncached_text_input_tokens: 1, cached_text_input_tokens: 1,
+      text_output_tokens: 1, text_total_tokens: 3 },
+  ],
+});
+
+/* ── scenarios ─────────────────────────────────────────────────────────── */
+let WINDOW_SEC, WINDOW_START, USED_PERCENT, RENEWS_AT, DAYS, MODELS_FOR;
+
+const FAST_MODELS = [
+  { model: "gpt-5.6-sol", speed: "fast", credits: 0,
+    uncached_text_input_tokens: 2000000, cached_text_input_tokens: 40000000,
+    text_output_tokens: 300000, text_total_tokens: 42300000 },
+  { model: "gpt-5.6-sol", speed: "standard", credits: 0,
+    uncached_text_input_tokens: 1000000, cached_text_input_tokens: 20000000,
+    text_output_tokens: 150000, text_total_tokens: 21150000 },
+  // no published fast multiplier — must be flagged, not guessed
+  { model: "gpt-5.4-mini", speed: "fast", credits: 0,
+    uncached_text_input_tokens: 400000, cached_text_input_tokens: 20000,
+    text_output_tokens: 6000, text_total_tokens: 426000 },
+];
+
+if (MODE === "multi") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 1.5 * DAY) / 1000);
+  USED_PERCENT = 26;
+  RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
+  DAYS = [
+    { at: NOW - 13 * DAY, k: 0.20, turns: 9,  threads: 2 },
+    { at: NOW - 11 * DAY, k: 0.35, turns: 14, threads: 3 },
+    { at: NOW -  6 * DAY, k: 0.28, turns: 11, threads: 2 },
+    { at: NOW -  4 * DAY, k: 0.44, turns: 19, threads: 4 },
+    { at: NOW -  1 * DAY, k: 0.26, turns: 10, threads: 2 },
+  ];
+} else if (MODE === "fresh") {
+  WINDOW_SEC = 2628000;
+  WINDOW_START = Math.floor(NOW / 1000);
+  USED_PERCENT = 0;
+  RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
+  DAYS = [{ at: NOW - 3 * DAY, k: 1, turns: 17, threads: 3 }];
+} else if (MODE === "hourly") {
+  WINDOW_SEC = 5 * 3600;
+  WINDOW_START = Math.floor((NOW - 2 * 3600000) / 1000);
+  USED_PERCENT = 48;
+  RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
+  DAYS = [{ at: NOW, k: 0.3, turns: 6, threads: 1 }];
+} else if (MODE === "fast") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
+  USED_PERCENT = 40;
+  RENEWS_AT = new Date(NOW + 12 * DAY).toISOString();
+  DAYS = [{ at: NOW - 1 * DAY, k: 1, turns: 12, threads: 3 }];
+  MODELS_FOR = () => FAST_MODELS;
+} else {
+  WINDOW_SEC = 2628000;
+  WINDOW_START = Math.floor((NOW - 15 * DAY) / 1000);
+  USED_PERCENT = 99.93;
+  RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
+  DAYS = [{ at: NOW - 3 * DAY, k: 1, turns: 17, threads: 3 }];
+}
+
+const modelsFor = MODELS_FOR || ((d) => scale(REAL_MODELS, d.k));
+
+const BREAKDOWN = { units: "credits", group_by: "day",
+  data: DAYS.map(d => breakdownRow(utcDay(d.at), modelsFor(d))) };
+const COUNTS = { group_by: "day", data: DAYS.map(d => countsRow(utcDay(d.at), d.turns, d.threads)) };
+const ATTRIBUTION = { group: "workspace", group_by: "day",
+  data: DAYS.map(d => ({ date: utcDay(d.at),
+    code_attribution: { lines_of_code: { added: Math.round(2400 * d.k), removed: Math.round(600 * d.k) } } })) };
+const SKILLS = { group_by: "day", data: DAYS.map(d => ({ date: utcDay(d.at), skill_usage_overviews: [
+  { skill_name: "weekly-ai-signal", display_name: "Weekly Ai Signal", skill_ids: [], invocation_counts: Math.max(1, Math.round(19 * d.k)) },
+  { skill_name: "agent-reach", display_name: "Agent Reach", skill_ids: [], invocation_counts: Math.max(1, Math.round(8 * d.k)) },
+  { skill_name: "diagnosing-bugs", display_name: "Diagnosing Bugs", skill_ids: [], invocation_counts: Math.max(1, Math.round(4 * d.k)) },
+]})) };
+const PLUGINS = { group_by: "day", data: DAYS.map(d => ({ date: utcDay(d.at), plugin_usage_overviews: [
+  { plugin_id: "browser@openai-bundled", plugin_name: "browser", display_name: "Browser",
+    marketplace: "openai-bundled", invocation_counts: Math.max(1, Math.round(6 * d.k)) },
+  { plugin_id: "pdf@openai-primary-runtime", plugin_name: "pdf", display_name: "Pdf",
+    marketplace: "openai-primary-runtime", invocation_counts: Math.max(1, Math.round(3 * d.k)) },
+]})) };
+
+const USAGE = {
+  plan_type: "team",
+  rate_limit: {
+    allowed: true, limit_reached: false,
+    primary_window: {
+      used_percent: USED_PERCENT,
+      limit_window_seconds: WINDOW_SEC,
+      reset_after_seconds: WINDOW_SEC,
+      reset_at: WINDOW_START + WINDOW_SEC,
+    },
+    secondary_window: null,
+  },
+  credits: { has_credits: false, unlimited: false, balance: null },
+};
+
+const CHECK = { accounts: { "4456f2d2": { entitlement: {
+  subscription_id: "test", has_active_subscription: true, subscription_plan: "chatgptteamplan",
+  expires_at: RENEWS_AT, renews_at: RENEWS_AT, cancels_at: null,
+  billing_period: "monthly", billing_currency: "GBP",
+}}}};
+
+/* ── stub ──────────────────────────────────────────────────────────────── */
+// The real endpoints honour start_date / end_date, and end_date is exclusive. A stub that
+// returns everything regardless would let a scenario "pass" on data the script never asked
+// for — which is how an under-fetching bug hides.
+function clip(payload, url) {
+  const q = new URL(url, "http://x").searchParams;
+  const from = q.get("start_date");
+  const to = q.get("end_date");
+  if (!from || !to) return payload;
+  return { ...payload, data: (payload.data || []).filter(r => r.date >= from && r.date < to) };
+}
+
+// Must be a real Response: browser extensions call .clone() on fetch results.
+const reply = (obj) => Promise.resolve(
+  new Response(JSON.stringify(obj), { status: 200, headers: { "Content-Type": "application/json" } })
+);
+
+window.__calls = [];
+window.fetch = (url) => {
+  const u = String(url);
+  window.__calls.push(u.split("?")[0]);
+  if (u.includes("daily-workspace-user-token-usage-breakdown")) return reply(clip(BREAKDOWN, u));
+  if (u.includes("daily-workspace-usage-counts")) return reply(clip(COUNTS, u));
+  if (u.includes("daily-skill-usage-metrics")) return reply(clip(SKILLS, u));
+  if (u.includes("daily-plugin-usage-metrics")) return reply(clip(PLUGINS, u));
+  if (u.includes("code-attribution")) return reply(clip(ATTRIBUTION, u));
+  if (u.includes("/accounts/check")) return reply(CHECK);
+  if (u.includes("/wham/usage")) return reply(USAGE);
+  return Promise.reject(new Error("no stub for " + u));
+};
+</script>
+
+<script src="how-much-i-get-from-codex.user.js"></script>
+</body>
