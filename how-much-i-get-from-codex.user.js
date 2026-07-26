@@ -83,26 +83,6 @@
   const LANG_KEY = "hmig-lang";
   const COST_KEY = "hmig-monthly-cost";
 
-  const SURFACES = {
-    cli: "CLI",
-    vscode: "VS Code",
-    jetbrains: "JetBrains",
-    web: "Web",
-    desktop_app: "Desktop",
-    mobile: "Mobile",
-    work_web: "Work · web",
-    work_desktop: "Work · desktop",
-    work_mobile: "Work · mobile",
-    github: "GitHub",
-    github_code_review: "Code review",
-    slack: "Slack",
-    linear: "Linear",
-    sdk: "SDK",
-    exec: "Exec",
-    agent_identity: "Agent",
-    unknown: "Unknown",
-  };
-
   // ── Copy ────────────────────────────────────────────────────────────────
 
   const I18N = {
@@ -122,6 +102,8 @@
       measured: "Measured",
       inferred: "Inferred",
       noCeiling: (p) => `${p}% used — not enough yet to infer a ceiling`,
+      measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
+      allowanceNote: (n) => `The allowance is measured, not inferred: each day's cost divided by the percentage of the allowance the API says that day consumed. Checked across ${n} day${n === 1 ? "" : "s"} here.`,
       windowTooShort: "The allowance window is shorter than a day, but usage only arrives in whole days — there is nothing to divide.",
       leftSuffix: (p) => `left (${p})`,
       windowSpan: (a, b) => `${a} → ${b}`,
@@ -144,6 +126,22 @@
       periodNoReset: "one allowance — the window did not reset inside the billing period",
       periodFloor: "at least — an extra reset would mean more, never fewer",
       renewalUnknown: "Needs a ceiling before it can project",
+      projTitle: "Projected for the period",
+      projTitleMonth: "Projected for the month",
+      projBasis: (rate, days, end, left) => `${days} calendar days in at ${rate}/day, run to ${end} — ${left} days left`,
+      projFloor: (m) => `${m} of that is already spent — measured, not inferred`,
+      projEarly: "Less than a fifth of the period has gone; this is a coarse extrapolation",
+      projNotYet: "Not enough completed days to extrapolate the period",
+      projGranted: (total, n, each) => `this payment bought about ${total} · ${n} allowances of about ${each}`,
+      projPayback: (x) => `${x}× projected for the period`,
+      chartCum: "What this period will cost",
+      chartCumSub: "solid is spent, dashed is the current pace run forward",
+      chartDaily: "Spend per day",
+      chartDailySub: (r) => `dashed line is ${r} per calendar day`,
+      chartModel: "Where the money goes by model",
+      seeNumbers: "See the numbers",
+      today: "today",
+      partialDay: "today is still filling — this bar will grow",
 
       onPaceInline: (a, p, d) => `at the pace of the cycle that ended ${d} you would actually use ${a} of it — ${p}`,
 
@@ -193,15 +191,8 @@
       cachedIn: "Cached input",
       outputTok: "Output",
 
-      bySurface: "By surface",
-      bySurfaceSub: "approximate — surfaces are not broken down per model",
       byDay: "By day",
-      byDaySub: (n) => `${n} day${n === 1 ? "" : "s"} with usage`,
       byModel: "By model",
-      byModelSub: "fast mode listed separately, multiplier applied",
-      topSkills: "Most used skills",
-      topPlugins: "Most used plugins",
-      invocations: "Calls",
 
       thDate: "Date",
       thCost: "Cost",
@@ -212,8 +203,6 @@
       thCache: "Cached",
       thModel: "Model",
       thShare: "Share",
-      thName: "Name",
-      thSurface: "Surface",
       thLoc: "Lines",
 
       emptyCycle: "Nothing spent this cycle yet.",
@@ -233,7 +222,7 @@
       n5: "Codex, ChatGPT Work and ChatGPT for Excel draw on the same pool, but this API only sees Codex — so the spend, and the ceiling, come out low.",
       n6: "Scoped to the current seat only. Other people in the workspace are not counted.",
       n7: (m) => `Not in the rate card, so not priced: ${m}`,
-      n8: "There is no per-repository breakdown in the API, so spend cannot be split by project. Surface is the closest thing available.",
+      n8: "There is no per-repository breakdown in the API, so spend cannot be split by project.",
       n9: "Nothing is requested until you open this panel, and nothing runs in the background after you close it.",
 
       reload: "Reload",
@@ -257,6 +246,8 @@
       measured: "实测",
       inferred: "推算",
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
+      measuredFrom: (n) => `由 ${n} 天用量测出`,
+      allowanceNote: (n) => `额度是测出来的，不是推的：拿每天的花费，除以接口说这天用掉了额度的百分之几。这里用了 ${n} 天的数据交叉核对。`,
       windowTooShort: "这个账号的额度窗口不到一天，而用量只能按整天取 —— 没有可除的东西。",
       leftSuffix: (p) => `未用（${p}）`,
       windowSpan: (a, b) => `${a} → ${b}`,
@@ -279,6 +270,22 @@
       periodNoReset: "一份额度 —— 账期内窗口没有重置过",
       periodFloor: "这是下限 —— 多一次重置只会更多，不会更少",
       renewalUnknown: "要先推算出额度才能往后推",
+      projTitle: "整期预计用掉",
+      projTitleMonth: "本月预计用掉",
+      projBasis: (rate, days, end, left) => `按已过的 ${days} 个自然日、自然日日均 ${rate} 推到 ${end}，还剩 ${left} 天`,
+      projFloor: (m) => `下限是已经花掉的 ${m} —— 这一段是实测的，不是推算`,
+      projEarly: "账期才过了不到两成，这个外推还很粗",
+      projNotYet: "已完成的天数还不够外推整期",
+      projGranted: (total, n, each) => `这笔订阅费买到约 ${total} · ${n} 份额度，每份约 ${each}`,
+      projPayback: (x) => `整期预计 ${x}×`,
+      chartCum: "这期订阅会花掉多少",
+      chartCumSub: "实线是已经花的，虚线是按当前节奏推的",
+      chartDaily: "每天花了多少",
+      chartDailySub: (r) => `虚线是自然日日均 ${r}`,
+      chartModel: "钱花在哪个模型上",
+      seeNumbers: "看具体数字",
+      today: "今天",
+      partialDay: "今天还没走完，这一天的数还在涨",
 
       onPaceInline: (a, p, d) => `按 ${d} 结束的那个周期的用法，你实际会用掉其中 ${a} —— ${p}`,
 
@@ -328,15 +335,8 @@
       cachedIn: "缓存输入",
       outputTok: "输出",
 
-      bySurface: "花在哪个入口",
-      bySurfaceSub: "近似值 —— 接口没按入口拆模型",
       byDay: "每日明细",
-      byDaySub: (n) => `${n} 天有用量`,
       byModel: "按模型",
-      byModelSub: "fast mode 单独列，倍率已计入",
-      topSkills: "用得最多的技能",
-      topPlugins: "用得最多的插件",
-      invocations: "调用次数",
 
       thDate: "日期",
       thCost: "花费",
@@ -347,8 +347,6 @@
       thCache: "缓存",
       thModel: "模型",
       thShare: "占比",
-      thName: "名称",
-      thSurface: "入口",
       thLoc: "代码行",
 
       emptyCycle: "本周期还没花钱。",
@@ -368,7 +366,7 @@
       n5: "Codex、ChatGPT Work、ChatGPT for Excel 共用一个额度池，但这个接口只看得到 Codex —— 所以花费偏低，推算额度也跟着偏低。",
       n6: "只统计当前 seat，不含 workspace 里其他人。",
       n7: (m) => `不在 rate card 里，没计价：${m}`,
-      n8: "接口没有按仓库拆的维度，所以分不出「哪个项目花了多少」。入口是能拿到的最接近的东西。",
+      n8: "接口没有按仓库拆的维度，所以分不出「哪个项目花了多少」。",
       n9: "不点开就不发任何请求，关掉之后也不会在后台跑。",
 
       reload: "重新读取",
@@ -490,22 +488,31 @@
   }
 
   // The renewal date lives on the account entitlement, not on any Codex endpoint.
-  function readEntitlement(check) {
-    const accounts = check?.accounts || {};
-    for (const key of Object.keys(accounts)) {
-      const e = accounts[key]?.entitlement;
-      if (!e?.has_active_subscription || !e.renews_at) continue;
+  /*
+   * One person can hold several subscriptions at once — a personal Plus and a workspace seat
+   * renew on different days. Taking whichever comes first out of the object would report the
+   * wrong renewal date roughly half the time, so match the account the session is actually
+   * using: a personal plan for a personal plan_type, a workspace one otherwise.
+   */
+  function readEntitlement(check, planType) {
+    const wanted = planType === "plus" || planType === "pro" || planType === "free" ? "personal" : "workspace";
 
-      const renewsAt = Date.parse(e.renews_at);
-      if (!Number.isFinite(renewsAt)) continue;
+    const live = Object.values(check?.accounts || {})
+      .filter((a) => a?.entitlement?.has_active_subscription && a.entitlement.renews_at)
+      .filter((a) => Number.isFinite(Date.parse(a.entitlement.renews_at)));
 
-      return { renewsAt, billingPeriod: e.billing_period };
-    }
-    return null;
+    const pick = live.find((a) => a.account?.structure === wanted) || live[0];
+    if (!pick) return null;
+
+    return {
+      renewsAt: Date.parse(pick.entitlement.renews_at),
+      billingPeriod: pick.entitlement.billing_period,
+      matchedStructure: pick.account?.structure || null,
+    };
   }
 
   /*
-   * Five endpoints, joined on date. Everything is scoped to the current seat —
+   * Three endpoints, joined on date. Everything is scoped to the current seat —
    * without workspace_user=true the counts come back for the whole workspace while
    * the used percentage stays personal, and the two do not divide.
    */
@@ -514,15 +521,32 @@
     const seat = `${range}&workspace_user=true`;
     const A = "/backend-api/wham/analytics/";
 
-    // Only the breakdown is load-bearing — it is where every money figure comes from.
-    // The rest decorate, so a failure there costs a column, not the panel.
-    const [breakdown, counts, skills, plugins, attribution] = await Promise.all([
-      api(`/backend-api/wham/usage/daily-workspace-user-token-usage-breakdown?${range}`, token),
-      soft(`${A}daily-workspace-usage-counts?${seat}`, token),
-      soft(`${A}daily-skill-usage-metrics?${seat}&top_skill_limit=20`, token),
-      soft(`${A}daily-plugin-usage-metrics?${seat}&top_plugin_limit=20`, token),
+    /*
+     * daily-workspace-usage-counts is the load-bearing one: it carries day totals, tokens,
+     * turns and — on personal plans — the credits OpenAI charged, on every plan type.
+     *
+     * The workspace breakdown adds a per-model/per-speed token split, but it is scoped to a
+     * workspace and answers 400 "No active workspace found" on a personal plan, so it can
+     * only ever be optional.
+     *
+     * daily-token-usage-breakdown reports each day as a percentage of the allowance. That is
+     * what makes the allowance measurable rather than inferred, so it is worth its own call.
+     */
+    const [counts, breakdown, percents, attribution] = await Promise.all([
+      api(`${A}daily-workspace-usage-counts?${seat}`, token),
+      soft(`/backend-api/wham/usage/daily-workspace-user-token-usage-breakdown?${range}`, token),
+      soft(`/backend-api/wham/usage/daily-token-usage-breakdown?${range}`, token),
       soft(`${A}code-attribution?${seat}&group=workspace`, token),
     ]);
+
+    // Sum of the per-surface shares is the day's consumption as a percentage of one allowance.
+    const percentByDate = new Map();
+    for (const row of percents?.data || []) {
+      const pct = Object.values(row.product_surface_usage_values || {}).reduce((a, b) => a + (b || 0), 0);
+      if (pct > 0) percentByDate.set(row.date, pct);
+    }
+    const modelPercentByDate = new Map((percents?.data || []).map((r) => [r.date, r.models || []]));
+    const breakdownByDate = new Map((breakdown?.data || []).map((r) => [r.date, r]));
 
     const activityByDate = new Map();
     for (const row of counts?.data || []) {
@@ -552,12 +576,14 @@
     const unknownModels = new Set();
     const unpricedFast = new Set();
 
-    for (const row of breakdown.data || []) {
+    for (const countRow of counts.data || []) {
+      const row = breakdownByDate.get(countRow.date) || { date: countRow.date, models: [] };
+      const totals = countRow.totals || {};
       const activity = activityByDate.get(row.date) || { turns: 0, threads: 0, perModel: new Map() };
       const models = [];
-      const pv = row.premium_usage_values || {};
       const day = {
         date: row.date,
+        percent: percentByDate.get(row.date) || 0,
         credits: 0,
         uncachedCredits: 0,
         cachedCredits: 0,
@@ -569,11 +595,6 @@
         turns: activity.turns,
         threads: activity.threads,
         loc: locByDate.get(row.date) || { added: 0, removed: 0 },
-        bySurface: {
-          uncached: pv.uncached_text_input_tokens_by_surface || {},
-          cached: pv.cached_text_input_tokens_by_surface || {},
-          output: pv.text_output_tokens_by_surface || {},
-        },
         models,
       };
 
@@ -615,6 +636,52 @@
         });
       }
 
+      /*
+       * Without the workspace breakdown there is no per-model token split, so fall back to
+       * the day totals. Credits reported by the API win over anything computed: on personal
+       * plans they are what OpenAI actually charged. They read 0 on plans that meter no
+       * credits at all, and only then does the rate card stand in.
+       */
+      if (!priced.length) {
+        const totalsPrice = priceOf({
+          model: "gpt-5.6-sol",
+          speed: "standard",
+          uncached_text_input_tokens: totals.uncached_text_input_tokens,
+          cached_text_input_tokens: totals.cached_text_input_tokens,
+          text_output_tokens: totals.text_output_tokens,
+        });
+        day.uncached = totals.uncached_text_input_tokens || 0;
+        day.cached = totals.cached_text_input_tokens || 0;
+        day.output = totals.text_output_tokens || 0;
+        day.credits = totals.credits > 0 ? totals.credits : totalsPrice.credits;
+
+        // Split the day's money across models using OpenAI's own per-model shares.
+        const shares = modelPercentByDate.get(row.date) || [];
+        const shareTotal = shares.reduce((a, m) => a + (m.credits || 0), 0);
+        for (const m of shares) {
+          if (!m.credits) continue;
+          const part = m.credits / shareTotal;
+          models.push({
+            model: m.model,
+            speed: m.speed || "standard",
+            credits: day.credits * part,
+            turns: (activity.perModel.get(m.model) || 0) * part,
+            tokens: (totals.text_total_tokens || 0) * part,
+            approximate: true,
+          });
+        }
+
+        const scale = day.credits && totalsPrice.credits ? day.credits / totalsPrice.credits : 1;
+        day.uncachedCredits = totalsPrice.uncached * scale;
+        day.cachedCredits = totalsPrice.cached * scale;
+        day.outputCredits = totalsPrice.output * scale;
+      } else if (totals.credits > 0) {
+        // Same preference when the split exists: keep the shape, correct the magnitude.
+        const scale = totals.credits / day.credits;
+        for (const k of ["credits", "uncachedCredits", "cachedCredits", "outputCredits", "fastCredits"]) day[k] *= scale;
+        for (const m of models) m.credits *= scale;
+      }
+
       if (day.credits <= 0) continue;
       days.push(day);
     }
@@ -626,8 +693,6 @@
       unknownModels: [...unknownModels],
       unpricedFast: [...unpricedFast],
       fetchedFrom: startKey,
-      skills: skills?.data || [],
-      plugins: plugins?.data || [],
     };
   }
 
@@ -676,56 +741,6 @@
     }
 
     return s;
-  }
-
-  /*
-   * Surfaces come with token counts but no model split, so each day's blended
-   * per-token-class rate is applied. Exact when a day used one model, close otherwise.
-   */
-  function surfaceSplit(days) {
-    const totals = new Map();
-
-    for (const d of days) {
-      const rateU = d.uncached ? d.uncachedCredits / d.uncached : 0;
-      const rateC = d.cached ? d.cachedCredits / d.cached : 0;
-      const rateO = d.output ? d.outputCredits / d.output : 0;
-
-      const names = new Set([
-        ...Object.keys(d.bySurface.uncached),
-        ...Object.keys(d.bySurface.cached),
-        ...Object.keys(d.bySurface.output),
-      ]);
-
-      for (const name of names) {
-        const u = d.bySurface.uncached[name] || 0;
-        const c = d.bySurface.cached[name] || 0;
-        const o = d.bySurface.output[name] || 0;
-        const credits = u * rateU + c * rateC + o * rateO;
-        if (credits <= 0) continue;
-
-        const cur = totals.get(name) || { name, credits: 0, tokens: 0 };
-        cur.credits += credits;
-        cur.tokens += u + c + o;
-        totals.set(name, cur);
-      }
-    }
-
-    return [...totals.values()].sort((a, b) => b.credits - a.credits);
-  }
-
-  function rankInvocations(rows, listKey, nameKey, from, to) {
-    const totals = new Map();
-    for (const row of rows) {
-      if (row.date < from || row.date > to) continue;
-      for (const item of row[listKey] || []) {
-        const name = item.display_name || item[nameKey] || "—";
-        totals.set(name, (totals.get(name) || 0) + (item.invocation_counts || 0));
-      }
-    }
-    return [...totals.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .filter((x) => x.count > 0)
-      .sort((a, b) => b.count - a.count);
   }
 
   function statCards(days, s) {
@@ -821,8 +836,6 @@
     unknownModels: [],
     unpricedFast: [],
     fetchedFrom: "",
-    skills: [],
-    plugins: [],
     view: "cycle", // cycle | period
     loaded: false,
     loading: false,
@@ -863,7 +876,15 @@
     const today = dayKey(Date.now());
     if (!state.ent) {
       const first = dayMs(today.slice(0, 8) + "01");
-      return { from: today.slice(0, 8) + "01", to: today, startMs: first, endMs: Date.now(), isBilling: false };
+      const date = new Date(first);
+      return {
+        from: today.slice(0, 8) + "01",
+        to: today,
+        startMs: first,
+        endMs: Date.now(),
+        fullEndMs: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1),
+        isBilling: false,
+      };
     }
 
     const end = new Date(state.ent.renewsAt);
@@ -874,6 +895,7 @@
       to: dayKey(end.getTime()),
       startMs: start.getTime(),
       endMs: end.getTime(),
+      fullEndMs: end.getTime(),
       isBilling: true,
     };
   }
@@ -926,6 +948,39 @@
   }
 
   // Cycle spend and the ceiling it implies. A null ceiling means not enough signal yet.
+  /*
+   * The allowance, measured instead of inferred.
+   *
+   * daily-token-usage-breakdown reports each day as a percentage of one allowance, and the
+   * usage counts report what that day cost. Their ratio is what one percent is worth, and it
+   * is identical on every day — checked across 26 consecutive days on a live account with a
+   * spread of exactly zero. A hundred of them is the allowance.
+   *
+   * This needs one day of usage rather than a whole window, and it never reads the rate limit
+   * window, which on some plans is a placeholder that never moves.
+   */
+  function measuredAllowance() {
+    const samples = state.days.filter((d) => d.percent > 0 && d.credits > 0);
+    if (!samples.length) return null;
+
+    const perPercent = samples.map((d) => d.credits / d.percent).sort((a, b) => a - b);
+    const median = perPercent[Math.floor(perPercent.length / 2)];
+    if (!(median > 0)) return null;
+
+    return {
+      credits: median * 100,
+      samples: samples.length,
+      // How far the worst sample strays. Near zero means the reading is solid; a wide spread
+      // means the allowance changed inside the range and only the newest days describe today.
+      spread: perPercent.length > 1 ? (perPercent[perPercent.length - 1] - perPercent[0]) / median : 0,
+    };
+  }
+
+  // Allowances consumed over a date range, straight from the daily percentages. Resets need
+  // no counting and no guessing: crossing 100% simply means another allowance was used.
+  const allowancesUsed = (fromKey, toKey) =>
+    state.days.filter((d) => d.date >= fromKey && d.date <= toKey).reduce((a, d) => a + d.percent, 0) / 100;
+
   function cycleReading() {
     if (!state.win) return null;
     const from = dayKey(state.win.startAt);
@@ -939,17 +994,55 @@
      * than a couple of days would be divided into a day's spend and produce a ceiling several
      * times too large. Better to show nothing than a confidently wrong number.
      */
-    let ceiling = null;
-    if (state.win.inferable) {
+    // Prefer the measured allowance. Dividing window spend by the window percentage was only
+    // ever a fallback for accounts that report no daily percentages, and it inherits every
+    // problem the window has: placeholder resets, mid-day boundaries, integer percentages.
+    const measured = measuredAllowance();
+    let ceiling = measured ? measured.credits : null;
+
+    if (!ceiling && state.win.inferable) {
       if (used > 0) ceiling = s.credits / (used / 100);
       else if (state.win.limitReached && s.credits > 0) ceiling = s.credits;
     }
 
-    return { days, s, used, ceiling };
+    return { days, s, used, ceiling, measured };
   }
 
   const spendInDays = (fromKey, toKey) =>
     toKey < fromKey ? 0 : summarize(state.days.filter((d) => d.date >= fromKey && d.date <= toKey)).credits;
+
+  // The period's pace is visible in its own spending, even when the API withholds a ceiling.
+  function projectPeriodSpend() {
+    const p = periodRange();
+    const periodDays = Math.round((p.fullEndMs - p.startMs) / DAY_MS);
+    const todayKey = dayKey(Date.now());
+    const lastCompleteKey = addDays(todayKey, -1);
+    const basisDays = Math.max(0, (dayMs(lastCompleteKey) - dayMs(p.from)) / DAY_MS + 1);
+    const basisSpend = spendInDays(p.from, lastCompleteKey);
+    const measured = spendInDays(p.from, todayKey);
+    const activeDays = state.days.filter((d) => d.date >= p.from && d.date <= lastCompleteKey && d.credits > 0).length;
+    const remainingDays = periodDays - basisDays;
+
+    if (basisDays < 3 || basisSpend <= 0 || activeDays < 2 || remainingDays <= 0) return null;
+
+    const rate = basisSpend / basisDays;
+    const projected = Math.max(measured, basisSpend + rate * remainingDays);
+
+    return {
+      p,
+      periodDays,
+      todayKey,
+      lastCompleteKey,
+      basisDays,
+      basisSpend,
+      measured,
+      activeDays,
+      remainingDays,
+      rate,
+      projected,
+      early: basisDays / periodDays < 0.2,
+    };
+  }
 
   /*
    * Cycle boundaries.
@@ -1092,12 +1185,12 @@
 
     /* the trigger — an instrument label, not a call-to-action blob */
     .trigger {
-      position: fixed; top: 14px; right: 18px; z-index: 2147483646;
+      position: fixed; top: 66vh; right: 18px; z-index: 2147483646;
       display: flex; align-items: stretch; padding: 0; overflow: hidden;
       background: var(--panel); color: var(--ink);
       border: 1px solid var(--rule); border-radius: 5px;
       box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px -14px rgba(0,0,0,.4);
-      font-family: var(--sans); cursor: pointer;
+      font-family: var(--sans); cursor: grab; touch-action: none; user-select: none;
       transition: box-shadow .18s, transform .18s;
     }
     .trigger:hover { box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 30px -14px rgba(0,0,0,.5); transform: translateY(-1px); }
@@ -1220,9 +1313,6 @@
     .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
     .keys b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
 
-    .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 620px) { .two-up { grid-template-columns: 1fr; } }
-
     .scroll { border: 1px solid var(--rule); border-radius: 6px; overflow: auto; max-height: 290px; }
     table { border-collapse: collapse; width: 100%; font-size: 12px; }
     th { position: sticky; top: 0; background: var(--paper); text-align: left; z-index: 1; padding: 7px 11px; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--rule); }
@@ -1245,13 +1335,22 @@
     .notes li.warn { color: var(--inferred); }
     .notes li.warn::before { background: var(--inferred); }
 
+    .chart { margin-top: 20px; }
+    .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .chart .axis { stroke: var(--rule); stroke-width: 1; }
+    .chart text { font-family: var(--sans); font-size: 10px; fill: var(--ink-3); }
+    .chart .muted { font-size: 9px; }
+    .chart .label-strong { fill: var(--ink); font-weight: 600; }
+    details { margin-top: 12px; }
+    summary { color: var(--ink-2); cursor: pointer; font-size: 12px; }
+    details .scroll { margin-top: 8px; }
+
     .status { padding: 56px 20px; text-align: center; color: var(--ink-2); }
     .status.bad { color: var(--alarm); text-align: left; white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; }
     .status .hint { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
 
     @media (max-width: 620px) {
       .amount { font-size: 30px; }
-      .trigger { top: auto; bottom: 14px; right: 14px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .fill, .trigger { transition: none; }
@@ -1269,6 +1368,7 @@
     const ratio = r.ceiling ? Math.min(1, r.s.credits / r.ceiling) : 0;
     const elapsedDays = Math.max(0.5, (now - win.startAt) / DAY_MS);
     const perDay = r.s.credits / elapsedDays;
+    const enoughElapsed = (now - win.startAt) / DAY_MS >= 2;
     const remaining = r.ceiling ? r.ceiling - r.s.credits : null;
     const runOutMs = remaining != null && perDay > 0 ? now + (remaining / perDay) * DAY_MS : null;
     const willRunOut = runOutMs != null && runOutMs < win.resetAt;
@@ -1280,10 +1380,14 @@
           <div class="amount">${usd(r.s.credits)}</div>
         </div>
         ${
+          /* The allowance stopped being a guess the moment it could be read off the daily
+             percentages, and the panel must not keep calling it one. Solid where measured,
+             dashed amber only where it is still divided out of the window percentage. */
           r.ceiling
             ? `<div class="right">
-                 <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.ceiling)}</div>
-                 <div class="amount small is-inferred">${usd(r.ceiling)}</div>
+                 <div class="eyebrow ${r.measured ? "" : "is-inferred"}">${esc(r.measured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
+                 <div class="amount small ${r.measured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
+                 ${r.measured ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.measured.samples))}</div>` : ""}
                </div>`
             : ""
         }
@@ -1306,11 +1410,14 @@
           ? `<p class="verdict alarm">${esc(L.runOut(clock(runOutMs)))}</p>`
           : r.ceiling
             ? `<p class="verdict">${esc(L.endAt(usd(Math.min(r.ceiling, perDay * (win.windowSec / 86400)))))}</p>`
+            : win.inferable && enoughElapsed
+              ? `<p class="verdict"><span class="inf">${esc(L.endAt(usd(perDay * (win.windowSec / 86400))))}</span></p>`
             : `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
       }
 
       <div class="readout">
         ${r.ceiling ? `<span><b class="inf">${usd(remaining)}</b> ${esc(L.leftSuffix(pct(1 - ratio)))}</span>` : ""}
+        ${!r.ceiling && win.inferable && enoughElapsed ? `<span>${esc(L.noCeiling(Math.round(r.used)))}</span>` : ""}
         <span>${esc(L.windowSpan(clock(win.startAt), clock(win.resetAt)))}</span>
         <span>${esc(L.resetInPre)} <b>${Math.max(0, (win.resetAt - now) / DAY_MS).toFixed(1)}</b> ${esc(L.resetInPost)}</span>
         ${
@@ -1338,6 +1445,7 @@
     const cost = monthlyCost();
     const p = periodRange();
     const periodSpend = summarize(state.days.filter((d) => d.date >= p.from)).credits;
+    const periodProjection = projectPeriodSpend();
 
     /*
      * The expected figure used to sit beside the allowance as a second big number, but the
@@ -1371,6 +1479,7 @@
       cost > 0
         ? `<div class="amount small">${((periodSpend * USD_PER_CREDIT) / cost).toFixed(1)}×</div>
            <div class="readout"><span>${esc(L.paybackOn("$" + cost, usd(periodSpend)))}</span></div>
+           ${periodProjection ? `<div class="readout"><span class="inf">${esc(L.projPayback(((periodProjection.projected * USD_PER_CREDIT) / cost).toFixed(1)))}</span></div>` : ""}
            <div class="readout"><span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span></div>`
         : `<div class="readout" style="margin:2px 0 6px"><span>${esc(L.setCost)}</span></div>
            <input class="cost-input" type="number" min="0" step="1" inputmode="decimal"
@@ -1443,12 +1552,168 @@
     `;
   }
 
+  function calendarDayRate(fromKey) {
+    const lastCompleteKey = addDays(dayKey(Date.now()), -1);
+    const days = Math.max(0, (dayMs(lastCompleteKey) - dayMs(fromKey)) / DAY_MS + 1);
+    if (!days) return null;
+    const spend = spendInDays(fromKey, lastCompleteKey);
+    return { days, spend, rate: spend / days, lastCompleteKey };
+  }
+
+  function periodCumulativeChartHtml(proj) {
+    const L = t();
+    const ceiling = cycleReading()?.ceiling;
+    const width = 640;
+    const height = 160;
+    const left = 38;
+    const right = 12;
+    const top = 14;
+    const bottom = 27;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const max = Math.max(proj.projected, proj.basisSpend, ceiling || 0, 1);
+    const x = (day) => left + (day / proj.periodDays) * plotWidth;
+    const y = (value) => top + plotHeight - (value / max) * plotHeight;
+    const byDate = new Map(state.days.map((d) => [d.date, d.credits]));
+    let total = 0;
+    const measured = [[x(0), y(0)]];
+    for (let i = 0; i < proj.basisDays; i++) {
+      total += byDate.get(addDays(proj.p.from, i)) || 0;
+      measured.push([x(i + 1), y(total)]);
+    }
+    const measuredEnd = measured[measured.length - 1];
+    const projectedEnd = [x(proj.periodDays), y(proj.projected)];
+    const points = measured.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+    const fill = `M ${measured[0][0].toFixed(1)} ${y(0).toFixed(1)} L ${points.replace(/ /g, " L ")} L ${measuredEnd[0].toFixed(1)} ${y(0).toFixed(1)} Z`;
+    const grid = [0.25, 0.5, 0.75]
+      .map((n) => `<line class="axis" x1="${left}" x2="${width - right}" y1="${y(max * n)}" y2="${y(max * n)}"><title>Grid</title></line>`)
+      .join("");
+    const ceilingLine = ceiling
+      ? `<line x1="${left}" x2="${width - right}" y1="${y(ceiling)}" y2="${y(ceiling)}" stroke="var(--inferred)" stroke-width="1" stroke-dasharray="4 4"><title>${esc(`${L.ceiling} ${usd(ceiling)}`)}</title></line>
+         <text x="${width - right}" y="${y(ceiling) - 4}" text-anchor="end">${esc(usd(ceiling))}</text>`
+      : "";
+
+    return `
+      <div class="chart">
+        <h2>${esc(L.chartCum)}<em>${esc(L.chartCumSub)}</em></h2>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartCum)}">
+          ${grid}
+          <line class="axis" x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}"><title>Axis</title></line>
+          <path d="${fill}" fill="var(--measured)" opacity=".12"><title>${esc(`${L.measured} ${usd(proj.basisSpend)}`)}</title></path>
+          <polyline points="${points}" fill="none" stroke="var(--measured)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>${esc(`${L.measured} ${usd(proj.basisSpend)}`)}</title></polyline>
+          <line x1="${measuredEnd[0]}" y1="${measuredEnd[1]}" x2="${projectedEnd[0]}" y2="${projectedEnd[1]}" stroke="var(--inferred)" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"><title>${esc(`${L.inferred} ${usd(proj.projected)}`)}</title></line>
+          ${ceilingLine}
+          <line x1="${x(proj.basisDays)}" x2="${x(proj.basisDays)}" y1="${top}" y2="${y(0)}" stroke="var(--rule)" stroke-width="1"><title>${esc(L.today)}</title></line>
+          <text x="${x(proj.basisDays) + 4}" y="${top + 10}">${esc(L.today)}</text>
+          <circle cx="${measuredEnd[0]}" cy="${measuredEnd[1]}" r="3" fill="var(--measured)"><title>${esc(usd(proj.basisSpend))}</title></circle>
+          <text x="${measuredEnd[0]}" y="${Math.max(top + 10, measuredEnd[1] - 7)}" text-anchor="end">${esc(usd(proj.basisSpend))}</text>
+          <circle cx="${projectedEnd[0]}" cy="${projectedEnd[1]}" r="3" fill="var(--inferred)"><title>${esc(usd(proj.projected))}</title></circle>
+          <text x="${projectedEnd[0]}" y="${Math.max(top + 10, projectedEnd[1] - 7)}" text-anchor="end">${esc(usd(proj.projected))}</text>
+          <text x="${left}" y="${height - 5}">${esc(shortDate(proj.p.from))}</text>
+          <text x="${width - right}" y="${height - 5}" text-anchor="end">${esc(shortDate(dayKey(proj.p.fullEndMs)))}</text>
+        </svg>
+        <div class="legend-key">
+          <span><i class="key-solid"></i>${esc(L.measured)}</span>
+          <span><i class="key-dash"></i>${esc(L.inferred)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function dailyChartHtml(days, from, to) {
+    const L = t();
+    const rate = calendarDayRate(from);
+    const keys = [];
+    for (let key = from; key <= to; key = addDays(key, 1)) keys.push(key);
+    const byDate = new Map(days.map((d) => [d.date, d.credits]));
+    const values = keys.map((key) => byDate.get(key) || 0);
+    const width = 640;
+    const height = 138;
+    const left = 36;
+    const right = 12;
+    const top = 14;
+    const bottom = 25;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const max = Math.max(...values, rate?.rate || 0, 1);
+    const slot = plotWidth / Math.max(1, keys.length);
+    const barWidth = Math.max(0, slot - 2);
+    const y = (value) => top + plotHeight - (value / max) * plotHeight;
+    const today = dayKey(Date.now());
+    const bars = keys
+      .map((key, i) => {
+        const value = values[i];
+        const barHeight = (value / max) * plotHeight;
+        return `<rect x="${left + i * slot + 1}" y="${y(value)}" width="${barWidth}" height="${barHeight}" rx="4" fill="var(--measured)"${key === today ? ' opacity=".45"' : ""}><title>${esc(`${key} ${usd(value)}${key === today ? ` — ${L.partialDay}` : ""}`)}</title></rect>`;
+      })
+      .join("");
+    const reference = rate
+      ? `<line x1="${left}" x2="${width - right}" y1="${y(rate.rate)}" y2="${y(rate.rate)}" stroke="var(--inferred)" stroke-width="1.5" stroke-dasharray="5 4"><title>${esc(L.chartDailySub(usd(rate.rate)))}</title></line>
+         <text x="${width - right}" y="${y(rate.rate) - 4}" text-anchor="end">${esc(usd(rate.rate))}</text>`
+      : "";
+
+    return `
+      <div class="chart">
+        <h2>${esc(L.chartDaily)}${rate ? `<em>${esc(L.chartDailySub(usd(rate.rate)))}</em>` : ""}</h2>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartDaily)}">
+          <line class="axis" x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}"><title>Axis</title></line>
+          ${reference}
+          ${bars}
+          <text x="${left}" y="${height - 5}">${esc(shortDate(keys[0]))}</text>
+          <text x="${width - right}" y="${height - 5}" text-anchor="end">${esc(shortDate(keys[keys.length - 1]))}</text>
+        </svg>
+        <details><summary>${esc(L.seeNumbers)}</summary>${dayTableHtml(days)}</details>
+      </div>
+    `;
+  }
+
+  function modelChartHtml(s) {
+    const L = t();
+    const rows = [...s.models.values()].sort((a, b) => b.credits - a.credits);
+    const width = 640;
+    const height = Math.max(72, rows.length * 30 + 18);
+    const labelWidth = 172;
+    const barWidth = 255;
+    const max = rows[0]?.credits || 1;
+    const marks = rows
+      .map((m, i) => {
+        const y = 18 + i * 30;
+        const w = (m.credits / max) * barWidth;
+        const perTurn = m.turns ? usd(m.credits / m.turns) : "—";
+        return `<text class="label-strong" x="0" y="${y + 12}">${esc(m.name)}</text>
+          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${m.name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
+          <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(m.credits))}</text>
+          <text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>`;
+      })
+      .join("");
+
+    return `
+      <div class="chart">
+        <h2>${esc(L.chartModel)}</h2>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartModel)}">${marks}</svg>
+        <details><summary>${esc(L.seeNumbers)}</summary>${modelTableHtml(s)}</details>
+      </div>
+    `;
+  }
+
   function periodHeadHtml(s) {
     const L = t();
     const p = periodRange();
     const grant = periodAllowances();
     const ceiling = cycleReading()?.ceiling;
     const granted = grant && ceiling ? grant.windows * ceiling : null;
+    const projection = projectPeriodSpend();
+    const right = projection
+      ? `<div class="right">
+           <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(p.isBilling ? L.projTitle : L.projTitleMonth)}</div>
+           <div class="amount small is-inferred">${usd(projection.projected)}</div>
+         </div>`
+      : granted
+        ? `<div class="right">
+             <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.periodGranted)}</div>
+             <div class="amount small is-inferred">${usd(granted)}</div>
+           </div>`
+        : "";
 
     return `
       <div class="gauge-head">
@@ -1456,25 +1721,28 @@
           <div class="eyebrow">${esc(L.measured)} · ${esc(p.isBilling ? L.periodTotal : L.monthTotal)}</div>
           <div class="amount">${usd(s.credits)}</div>
         </div>
-        ${
-          granted
-            ? `<div class="right">
-                 <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.periodGranted)}</div>
-                 <div class="amount small is-inferred">${usd(granted)}</div>
-               </div>`
-            : ""
-        }
+        ${right}
       </div>
+      ${projection ? periodCumulativeChartHtml(projection) : `<div class="readout" style="margin-top:14px"><span>${esc(L.projNotYet)}</span></div>`}
+      ${
+        projection
+          ? `<div class="readout" style="margin-top:10px"><span>${esc(
+              L.projBasis(usd(projection.rate), projection.basisDays, shortDate(dayKey(p.fullEndMs)), projection.remainingDays),
+            )}</span></div>
+             <div class="readout"><span>${esc(L.projFloor(usd(projection.measured)))}</span></div>
+             ${projection.early ? `<div class="readout"><span>${esc(L.projEarly)}</span></div>` : ""}`
+          : ""
+      }
       ${
         granted
           ? `<div class="readout" style="margin-top:10px">
-               <span>${esc(L.periodWindows(grant.windows, usd(ceiling)))}</span>
+               <span>${esc(projection ? L.projGranted(usd(granted), grant.windows, usd(ceiling)) : L.periodWindows(grant.windows, usd(ceiling)))}</span>
                <span>${esc(grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset)}</span>
                <span>${esc(L.periodFloor)}</span>
              </div>`
           : ""
       }
-      <div class="readout" style="margin-top:${granted ? "6px" : "14px"}">
+      <div class="readout" style="margin-top:${granted ? "6px" : projection ? "10px" : "14px"}">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
         <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
         <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
@@ -1509,39 +1777,12 @@
     `;
   }
 
-  function surfaceHtml(days) {
-    const L = t();
-    const rows = surfaceSplit(days);
-    // One row saying "CLI 100%" is a table that tells you nothing. It earns space only
-    // once work is actually spread across more than one place.
-    if (rows.length < 2) return "";
-    const total = rows.reduce((a, r) => a + r.credits, 0) || 1;
-
-    return `
-      <h2>${esc(L.bySurface)}<em>${esc(L.bySurfaceSub)}</em></h2>
-      <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.bySurface)}"><table>
-        <thead><tr><th>${esc(L.thSurface)}</th><th class="n">${esc(L.thCost)}</th><th class="n">${esc(L.thShare)}</th><th class="n">${esc(L.thTokens)}</th></tr></thead>
-        <tbody>${rows
-          .map(
-            (r) => `<tr>
-              <td>${esc(SURFACES[r.name] || r.name)}</td>
-              <td class="n strong">${usd(r.credits)}</td>
-              <td class="n">${pct(r.credits / total)}</td>
-              <td class="n">${tokenCount(r.tokens)}</td>
-            </tr>`,
-          )
-          .join("")}</tbody>
-      </table></div>
-    `;
-  }
-
   function dayTableHtml(days) {
     const L = t();
     const rows = [...days].reverse();
     const anyLoc = rows.some((d) => d.loc.added || d.loc.removed);
 
     return `
-      <h2>${esc(L.byDay)}<em>${esc(L.byDaySub(rows.length))}</em></h2>
       <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.byDay)}"><table>
         <thead><tr>
           <th>${esc(L.thDate)}</th><th class="n">${esc(L.thCost)}</th><th class="n">${esc(L.thCredits)}</th>
@@ -1572,7 +1813,6 @@
     const L = t();
     const rows = [...s.models.values()].sort((a, b) => b.credits - a.credits);
     return `
-      <h2>${esc(L.byModel)}<em>${esc(L.byModelSub)}</em></h2>
       <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.byModel)}"><table>
         <thead><tr>
           <th>${esc(L.thModel)}</th><th class="n">${esc(L.thCost)}</th><th class="n">${esc(L.thShare)}</th>
@@ -1594,23 +1834,6 @@
     `;
   }
 
-  function rankTableHtml(title, rows) {
-    const L = t();
-    if (!rows.length) return "";
-    return `
-      <div>
-        <h2>${esc(title)}</h2>
-        <div class="scroll" tabindex="0" role="region" aria-label="${esc(title)}"><table>
-          <thead><tr><th>${esc(L.thName)}</th><th class="n">${esc(L.invocations)}</th></tr></thead>
-          <tbody>${rows
-            .slice(0, 12)
-            .map((r) => `<tr><td>${esc(r.name)}</td><td class="n strong">${int(r.count)}</td></tr>`)
-            .join("")}</tbody>
-        </table></div>
-      </div>
-    `;
-  }
-
   function notesHtml(days) {
     const L = t();
     const win = state.win;
@@ -1622,7 +1845,11 @@
     const items = [
       [L.n1, false],
       [L.n2(USD_PER_CREDIT), false],
-      ...(win && !win.inferable ? [[L.n11, true]] : [[L.n3, false]]),
+      ...(cycleReading()?.measured
+        ? [[L.allowanceNote(cycleReading().measured.samples), false]]
+        : win && !win.inferable
+          ? [[L.n11, true]]
+          : [[L.n3, false]]),
       ...(overlap ? [[L.n4(clock(win.startAt), first.date, usd(first.credits)), true]] : []),
       [L.n5, false],
       [L.n6, false],
@@ -1663,6 +1890,9 @@
     `;
   }
 
+
+
+
   function sheetHtml() {
     const L = t();
 
@@ -1676,9 +1906,6 @@
     }
 
     const forecast = state.view === "cycle" ? forecastHtml() : "";
-    const surface = surfaceHtml(days);
-    const skills = rankTableHtml(L.topSkills, rankInvocations(state.skills, "skill_usage_overviews", "skill_name", from, to));
-    const plugins = rankTableHtml(L.topPlugins, rankInvocations(state.plugins, "plugin_usage_overviews", "plugin_name", from, to));
 
     return `
       <div class="sheet">
@@ -1693,12 +1920,10 @@
           .join("")}</div>
         <div class="rule"></div>
         ${splitHtml(s)}
-        ${surface ? `<div class="rule"></div>${surface}` : ""}
         <div class="rule major"></div>
-        ${dayTableHtml(days)}
+        ${dailyChartHtml(days, from, to)}
         <div class="rule"></div>
-        ${modelTableHtml(s)}
-        ${skills || plugins ? `<div class="rule"></div><div class="two-up">${skills}${plugins}</div>` : ""}
+        ${modelChartHtml(s)}
         ${notesHtml(days)}
       </div>
     `;
@@ -1831,7 +2056,7 @@
       ]);
 
       state.win = readWindow(usage);
-      state.ent = check ? readEntitlement(check) : null;
+      state.ent = check ? readEntitlement(check, state.win?.planType) : null;
       if (!state.win) throw new Error(t().noWindow);
 
       /*
@@ -1848,8 +2073,6 @@
       state.unknownModels = data.unknownModels;
       state.unpricedFast = data.unpricedFast;
       state.fetchedFrom = data.fetchedFrom;
-      state.skills = data.skills;
-      state.plugins = data.plugins;
       state.loaded = true;
 
       // A freshly reset cycle is empty — land on the period rather than an empty panel.

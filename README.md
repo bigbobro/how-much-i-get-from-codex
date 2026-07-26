@@ -25,7 +25,7 @@ This script works out the denominator.
   clock, so a billing period often contains more than one — burn through an allowance, wait
   for the reset, and a second full one opens before the payment renews
 - What a turn costs you, and what a thousand lines of code costs you
-- Which day, which model, which surface, which skill burned the most
+- Which day and which model burned the most
 
 **Nothing is requested until you open the panel.** No background polling, no requests
 on page load, nothing running after you close it.
@@ -48,6 +48,29 @@ per-model tokens × official rate card = credits spent    exact
 credits ÷ used percent                = the ceiling      inferred
 credits × $0.04                       = dollars
 ```
+
+### The allowance is measured, not inferred
+
+`daily-token-usage-breakdown` reports each day as **a percentage of one allowance**, and the
+usage counts report what that day cost. Their ratio is what one percent is worth:
+
+```
+allowance = day's credits ÷ day's percentage × 100
+```
+
+On a live Plus account this ratio came out at **49.897 credits per percent on all 26 days
+with usage, with a spread of exactly zero** — so the allowance is 4,989.7 credits, $199.59
+per window. One day of usage is enough to read it; the rate limit window is never touched.
+
+That matters because the window is not always trustworthy. On some plans `used_percent`
+sits at 0 forever while `reset_at` slides along with the clock — a placeholder, not a
+reading. Dividing window spend by that number produces a confident answer built on nothing.
+The daily percentages have no such problem.
+
+It also settles the question of **future resets, by not asking it.** Each day's percentage
+is how much of an allowance that day consumed, so summing them counts allowances directly —
+crossing 100% simply means another one was used. Nothing has to be assumed about when the
+window will reset next.
 
 ### Why the credits step is exact, not an estimate
 
@@ -86,6 +109,18 @@ Granted and usable are kept apart. **A window opening hands over the whole ceili
 only two days of the billing period remain; what limits you then is time, not allowance. So the
 allowance figure counts openings at full value, and a separate line says how much of it you
 would actually get through at the last full cycle's pace.
+
+### Projecting the whole payment
+
+The subscription view also projects what the whole period will cost from its **calendar-day run
+rate**: completed days so far, including days with zero spend, divided into their measured spend
+and run to the period end. It needs no ceiling, so it is the forecast that still works when the
+API reports `used_percent: 0`. The measured amount remains a hard floor; today's partial bucket
+is never used as the rate basis.
+
+The panel leads with charts rather than a wall of rows: cumulative measured spend followed by a
+dashed projection, daily columns with the calendar-day reference, and one-hue model bars. The
+underlying day and model tables remain available under “See the numbers”.
 
 ### Where it refuses to guess
 
@@ -130,7 +165,8 @@ This repository is private, so the usual one-click raw link will not resolve. In
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
 2. Open the Tampermonkey dashboard, create a new script, and paste in
    [`how-much-i-get-from-codex.user.js`](how-much-i-get-from-codex.user.js)
-3. Open <https://chatgpt.com/codex/cloud/settings/analytics> and click the label in the corner
+3. Open <https://chatgpt.com/codex/cloud/settings/analytics> and click the label two-thirds down
+   the right edge. Drag it anywhere that suits you; it stays there after reload.
 
 If the repository is ever made public, a raw link to the `.user.js` file installs in one click,
 and Tampermonkey will follow `@updateURL` from there.
@@ -154,14 +190,14 @@ with them in mind.
 | **Cycle boundaries do not align with days.** The window opens at a precise timestamp, but usage is only bucketed by whole UTC days, and the API rejects `group_by=hour` | The first day is over-counted, so **spend reads high and the ceiling reads high**. The panel flags this when it happens |
 | **The pool is shared.** Codex, ChatGPT Work and ChatGPT for Excel draw on the same allowance, but this API only sees Codex | **Spend reads low, so the ceiling reads low** |
 | **The used percentage is coarse** — the API reports it to the integer | At 1% used the inferred ceiling is meaningless. Above 50% it is worth trusting |
+| **Period projection extrapolates the calendar-day rate.** It assumes the remaining days resemble the completed ones, including zero-use days | A burst or a quiet week can move the final spend in either direction |
 
 Two things the API simply does not expose:
 
 - **Per-turn cost.** The finest granularity is day × model × speed. The panel gives you the
   dearest *day* per turn and the dearest *model* per turn instead.
 - **Per-repository or per-project spend.** `code-attribution` only accepts `group=workspace`;
-  every other grouping is rejected. Surface — CLI, VS Code, web, GitHub, Slack — is the closest
-  breakdown available.
+  every other grouping is rejected.
 
 ---
 
@@ -190,6 +226,7 @@ python3 -m http.server 8731
 | `smoketest.html#fast` | fast-mode rows, one with no published multiplier | 2.5× applied, the other flagged |
 | `smoketest.html#boundary` | windows open at 06:00 UTC, spend on days two segments compete for | segments partition the days exactly — no day counted twice |
 | `smoketest.html#noent` | `accounts/check` fails, no renewal date | falls back to the calendar month, drops every billing-period claim |
+| `smoketest.html#projection` | fresh 30.4-day window, 0% used, five active days and two zero days | period run rate projects without a ceiling; it is below the active-day average |
 
 The first case is the regression test that matters: the recorded day is real usage, and
 $250.00 is the ceiling it should reproduce.

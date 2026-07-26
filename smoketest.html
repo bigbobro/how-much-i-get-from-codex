@@ -19,8 +19,15 @@ the real script would never have fetched.</p>
   <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
   <li><a href="#boundary">#boundary</a> — windows open at 06:00 UTC, spend sits on days two
       segments compete for. Segment totals must not exceed the total spend.</li>
+  <li><a href="#personal">#personal</a> — a Plus-style account: the workspace breakdown 400s,
+      credits come from the counts endpoint, and the allowance is measured from the daily
+      percentages. Expect an allowance of <b>$199.59</b>.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
       Must fall back to the calendar month and drop every billing-period claim.</li>
+  <li><a href="#projection">#projection</a> — a freshly reset 30.4-day window reports 0%, while five active
+      days and two zero days sit inside a seven-day billing-period basis. On 2026-07-26: $494.66 measured,
+      $70.67 natural-day average, $2,190.64 projected over 31 days; the projection equals rate × period days
+      (floored at measured), stays at or above measured, and is lower than the $98.93 average on active days.</li>
 </ul>
 <p><small>Switching hash needs a reload — the scenario is read once at start-up.</small></p>
 
@@ -60,19 +67,8 @@ const scale = (models, k) => models.map(m => ({
   text_total_tokens: Math.round(m.text_total_tokens * k),
 }));
 
-const sum = (models, f) => models.reduce((a, m) => a + m[f], 0);
-
 const breakdownRow = (date, models) => ({
   date,
-  product_surface_usage_values: { cli: 0, vscode: 0, web: 0, unknown: 0 },
-  premium_usage_values: {
-    total_usage_credits: { cli: 0 },
-    credit_usage_credits: { cli: 0 },
-    uncached_text_input_tokens_by_surface: { cli: sum(models, "uncached_text_input_tokens") },
-    cached_text_input_tokens_by_surface:   { cli: sum(models, "cached_text_input_tokens") },
-    text_output_tokens_by_surface:         { cli: sum(models, "text_output_tokens") },
-    text_total_tokens_by_surface:          { cli: sum(models, "text_total_tokens") },
-  },
   models,
 });
 
@@ -81,7 +77,8 @@ const breakdownRow = (date, models) => ({
 // this array silently loses the turn count — that is the bug this shape exists to catch.
 const countsRow = (date, turns, threads) => ({
   date,
-  totals: { users: 1, threads, turns, credits: 0, on_demand_credits: 0 },
+  totals: { users: 1, threads, turns, credits: CREDITS_FOR(date), on_demand_credits: 0,
+    uncached_text_input_tokens: 0, cached_text_input_tokens: 0, text_output_tokens: 0, text_total_tokens: 0 },
   clients: [{ client_id: "CODEX_CLI", users: 1, threads, turns }],
   models: [
     { model: "gpt-5.4",      credits: 0, users: 1, threads: 1, turns: Math.max(1, Math.round(turns * 0.06)) },
@@ -154,12 +151,34 @@ if (MODE === "multi") {
     { at: open6 -  4 * DAY, k: 0.20, turns: 8,  threads: 2 },
     { at: open6,               k: 0.15, turns: 6,  threads: 1 },  // inside the current cycle
   ];
+} else if (MODE === "personal") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 31;
+  RENEWS_AT = new Date(NOW + 22 * DAY).toISOString();
+  DAYS = [
+    { at: NOON - 5 * DAY, k: 0.40, turns: 22, threads: 4 },
+    { at: NOON - 3 * DAY, k: 0.90, turns: 41, threads: 6 },
+    { at: NOON - 1 * DAY, k: 0.55, turns: 27, threads: 5 },
+  ];
 } else if (MODE === "noent") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
   USED_PERCENT = 55;
   RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
   DAYS = [{ at: NOON - 2 * DAY, k: 0.5, turns: 8, threads: 2 }];
+} else if (MODE === "projection") {
+  WINDOW_SEC = 2628000;
+  WINDOW_START = Math.floor(NOW / 1000);
+  USED_PERCENT = 0;
+  RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
+  DAYS = [
+    { at: NOON - 7 * DAY, k: 0.40, turns: 16, threads: 3 },
+    { at: NOON - 6 * DAY, k: 0.42, turns: 17, threads: 3 },
+    { at: NOON - 5 * DAY, k: 0.36, turns: 14, threads: 3 },
+    { at: NOON - 3 * DAY, k: 0.38, turns: 15, threads: 3 },
+    { at: NOON - 2 * DAY, k: 0.42, turns: 17, threads: 3 },
+  ];
 } else {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor((NOW - 15 * DAY) / 1000);
@@ -167,6 +186,26 @@ if (MODE === "multi") {
   RENEWS_AT = new Date(NOW + 24 * DAY).toISOString();
   DAYS = [{ at: NOON - 3 * DAY, k: 1, turns: 17, threads: 3 }];
 }
+
+/* daily-token-usage-breakdown: each day as a percentage of one allowance.
+   Built so that credits / percent is a constant — the invariant the calibration relies on,
+   and the thing that must break loudly if the calibration ever stops holding. */
+// Only personal plans meter credits and daily percentages. Everywhere else these read zero,
+// which is what keeps the rate-card path and the window-percentage fallback under test.
+const ALLOWANCE_CREDITS = 4989.7;
+const METERED = MODE === "personal";
+const DAY_CREDITS = METERED
+  ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * d.k * 0.5 * 10) / 10]))
+  : {};
+function CREDITS_FOR(date) { return DAY_CREDITS[date] || 0; }
+
+const PERCENTS = { units: "percent", group_by: "day", data: (METERED ? DAYS : []).map(d => {
+  const date = utcDay(d.at);
+  const pct = (DAY_CREDITS[date] / ALLOWANCE_CREDITS) * 100;
+  return { date, product_surface_usage_values: { cli: pct, vscode: 0, web: 0, unknown: 0 },
+    models: [{ model: "gpt-5.6-sol", speed: "standard", credits: pct * 0.95 },
+             { model: "gpt-5.4-mini", speed: "standard", credits: pct * 0.05 }] };
+})};
 
 const modelsFor = MODELS_FOR || ((d) => scale(REAL_MODELS, d.k));
 
@@ -176,18 +215,6 @@ const COUNTS = { group_by: "day", data: DAYS.map(d => countsRow(utcDay(d.at), d.
 const ATTRIBUTION = { group: "workspace", group_by: "day",
   data: DAYS.map(d => ({ date: utcDay(d.at),
     code_attribution: { lines_of_code: { added: Math.round(2400 * d.k), removed: Math.round(600 * d.k) } } })) };
-const SKILLS = { group_by: "day", data: DAYS.map(d => ({ date: utcDay(d.at), skill_usage_overviews: [
-  { skill_name: "weekly-ai-signal", display_name: "Weekly Ai Signal", skill_ids: [], invocation_counts: Math.max(1, Math.round(19 * d.k)) },
-  { skill_name: "agent-reach", display_name: "Agent Reach", skill_ids: [], invocation_counts: Math.max(1, Math.round(8 * d.k)) },
-  { skill_name: "diagnosing-bugs", display_name: "Diagnosing Bugs", skill_ids: [], invocation_counts: Math.max(1, Math.round(4 * d.k)) },
-]})) };
-const PLUGINS = { group_by: "day", data: DAYS.map(d => ({ date: utcDay(d.at), plugin_usage_overviews: [
-  { plugin_id: "browser@openai-bundled", plugin_name: "browser", display_name: "Browser",
-    marketplace: "openai-bundled", invocation_counts: Math.max(1, Math.round(6 * d.k)) },
-  { plugin_id: "pdf@openai-primary-runtime", plugin_name: "pdf", display_name: "Pdf",
-    marketplace: "openai-primary-runtime", invocation_counts: Math.max(1, Math.round(3 * d.k)) },
-]})) };
-
 const USAGE = {
   plan_type: "team",
   rate_limit: {
@@ -230,10 +257,13 @@ window.__calls = [];
 window.fetch = (url) => {
   const u = String(url);
   window.__calls.push(u.split("?")[0]);
-  if (u.includes("daily-workspace-user-token-usage-breakdown")) return reply(clip(BREAKDOWN, u));
+  if (u.includes("daily-workspace-user-token-usage-breakdown")) {
+    // Personal plans have no workspace; this endpoint answers 400 and everything must still work.
+    if (MODE === "personal") return Promise.resolve(new Response('{"detail":"No active workspace found for the current account."}', { status: 400 }));
+    return reply(clip(BREAKDOWN, u));
+  }
   if (u.includes("daily-workspace-usage-counts")) return reply(clip(COUNTS, u));
-  if (u.includes("daily-skill-usage-metrics")) return reply(clip(SKILLS, u));
-  if (u.includes("daily-plugin-usage-metrics")) return reply(clip(PLUGINS, u));
+  if (u.includes("usage/daily-token-usage-breakdown")) return reply(clip(PERCENTS, u));
   if (u.includes("code-attribution")) return reply(clip(ATTRIBUTION, u));
   if (u.includes("/accounts/check")) {
     // The entitlement call is optional; the panel must degrade rather than lie about a
