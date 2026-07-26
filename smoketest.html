@@ -29,6 +29,8 @@ the real script would never have fetched.</p>
       earlier days it disregarded.</li>
   <li><a href="#bank">#bank</a> — two reset cards left. They are allowances too, so the
       forecast must count them on top of the windows that roll on their own.</li>
+  <li><a href="#twosubs">#twosubs</a> — one login, a personal Plus and a workspace seat. The
+      panel must name which subscription its numbers belong to.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
       Must fall back to the calendar month and drop every billing-period claim.</li>
   <li><a href="#projection">#projection</a> — a freshly reset 30.4-day window reports 0%, while five active
@@ -198,6 +200,12 @@ if (MODE === "multi") {
   USED_PERCENT = 40;
   RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
   DAYS = [{ at: NOON - 4 * DAY, k: 0.6, turns: 25, threads: 5 }, { at: NOON - 1 * DAY, k: 0.5, turns: 20, threads: 4 }];
+} else if (MODE === "twosubs") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
+  USED_PERCENT = 35;
+  RENEWS_AT = new Date(NOW + 21 * DAY).toISOString();
+  DAYS = [{ at: NOON - 4 * DAY, k: 0.5, turns: 18, threads: 4 }, { at: NOON - 2 * DAY, k: 0.4, turns: 15, threads: 3 }];
 } else if (MODE === "personal") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
@@ -280,7 +288,8 @@ const ATTRIBUTION = { group: "workspace", group_by: "day",
 const RESET_BANK = MODE === "bank" ? 2 : 0;
 
 const USAGE = {
-  plan_type: "team",
+  plan_type: MODE === "personal" || MODE === "bank" || MODE === "changed" ? "plus" : "team",
+  email: "someone@example.com",
   rate_limit: {
     allowed: true, limit_reached: false,
     primary_window: {
@@ -295,7 +304,15 @@ const USAGE = {
   rate_limit_reset_credits: { available_count: RESET_BANK, applicable_available_count: RESET_BANK },
 };
 
-const CHECK = { accounts: { "4456f2d2": { entitlement: {
+// #twosubs: one login holding both a personal Plus and a workspace seat, which is when the
+// panel has to say which of the two it is reporting.
+const SECOND_ACCOUNT = MODE === "twosubs"
+  ? { "800cd026": { account: { account_id: "800cd026", structure: "personal" },
+      entitlement: { has_active_subscription: true, subscription_plan: "chatgptplusplan",
+        renews_at: new Date(NOW + 21 * DAY).toISOString(), cancels_at: null, billing_period: "monthly" } } }
+  : {};
+
+const CHECK = { accounts: { ...SECOND_ACCOUNT, "4456f2d2": { account: { account_id: "4456f2d2", structure: "workspace" }, entitlement: {
   subscription_id: "test", has_active_subscription: true, subscription_plan: "chatgptteamplan",
   expires_at: RENEWS_AT, renews_at: RENEWS_AT, cancels_at: null,
   billing_period: "monthly", billing_currency: "GBP",

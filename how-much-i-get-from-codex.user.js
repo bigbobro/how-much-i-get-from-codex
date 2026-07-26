@@ -102,6 +102,7 @@
       measured: "Measured",
       inferred: "Inferred",
       noCeiling: (p) => `${p}% used — not enough yet to infer a ceiling`,
+      twoSubscriptions: (n, plan) => `This login holds ${n} active subscriptions. Every figure here is for the ${plan} one — the subscription the Codex API answers for, which does not have to be the account named in the profile menu.`,
       measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
       usedAllowances: (n) => `${n} allowances used in this range`,
       overspent: (n) => `More than one allowance shows in this cycle — ${n} of them. The window reset partway through, so "left" is the remainder of the current one.`,
@@ -142,6 +143,7 @@
       projBasis: (rate, days, end, left) => `${days} calendar days in at ${rate}/day, run to ${end} — ${left} days left`,
       projFloor: (m) => `${m} of that is already spent — measured, not inferred`,
       projEarly: "Less than a fifth of the period has gone; this is a coarse extrapolation",
+      projNoWindow: "How much this period ends up costing depends on how many allowances open before renewal, and this plan does not report its window boundaries — so that is not knowable here. What is spent and how many allowances it took are measured below.",
       projNotYet: "Not enough completed days to extrapolate the period",
       projGranted: (total, n, each) => `this payment bought about ${total} · ${n} allowances of about ${each}`,
       projPayback: (x) => `${x}× projected for the period`,
@@ -257,6 +259,8 @@
       measured: "实测",
       inferred: "推算",
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
+      twoSubscriptions: (n, plan) => `This login holds ${n} active subscriptions. Every figure here is for the ${plan} one — the subscription the Codex API answers for, which does not have to be the account named in the profile menu.`,
+      twoSubscriptions: (n, plan) => `这个登录下有 ${n} 份有效订阅。这里所有数字都是 ${plan} 那一份的 —— 也就是 Codex 接口当前回答的那份，它不一定等于档案菜单里显示的账号。`,
       measuredFrom: (n) => `由 ${n} 天用量测出`,
       usedAllowances: (n) => `这段时间用掉 ${n} 份额度`,
       overspent: (n) => `本周期里出现了不止一份额度 —— ${n} 份。中途重置过，所以「剩余」指的是当前这一份还剩多少。`,
@@ -297,6 +301,7 @@
       projBasis: (rate, days, end, left) => `按已过的 ${days} 个自然日、自然日日均 ${rate} 推到 ${end}，还剩 ${left} 天`,
       projFloor: (m) => `下限是已经花掉的 ${m} —— 这一段是实测的，不是推算`,
       projEarly: "账期才过了不到两成，这个外推还很粗",
+      projNoWindow: "这个账期最后会花多少，取决于续费前还会开出几份额度，而这个套餐不报窗口边界 —— 这个数在这里就是不可知的。下面已经花了多少、用掉几份额度，都是实测的。",
       projNotYet: "已完成的天数还不够外推整期",
       projGranted: (total, n, each) => `这笔订阅费买到约 ${total} · ${n} 份额度，每份约 ${each}`,
       projPayback: (x) => `整期预计 ${x}×`,
@@ -522,6 +527,7 @@
       startAt: resetAt - windowSec * 1000,
       resetBank: bank,
       planType: usage.plan_type,
+      email: usage.email || "",
     };
   }
 
@@ -542,9 +548,19 @@
     const pick = live.find((a) => a.account?.structure === wanted) || live[0];
     if (!pick) return null;
 
+    /*
+     * One login can hold both a personal Plus and a workspace seat. The Codex endpoints
+     * answer for whichever context Codex itself is in, and that does not have to agree with
+     * the account the profile menu names — a ChatGPT-Account-ID header does not override it.
+     * Counting the live subscriptions is what lets the panel warn instead of quietly
+     * reporting a different subscription than the reader has in mind.
+     */
+    const distinct = new Set(live.map((a) => a.account?.account_id).filter(Boolean));
+
     return {
       renewsAt: Date.parse(pick.entitlement.renews_at),
       billingPeriod: pick.entitlement.billing_period,
+      liveSubscriptions: distinct.size,
     };
   }
 
@@ -1094,6 +1110,15 @@
     const remainingDays = periodDays - basisDays;
 
     if (basisDays < 3 || basisSpend <= 0 || activeDays < 2 || remainingDays <= 0) return null;
+
+    /*
+     * With a placeholder window there is no way to know how many allowances still open
+     * before renewal, so there is no cap to hold the pace down — and an uncapped pace is
+     * exactly the figure that overshoots what the account can reach. Report what was
+     * measured and say the rest is unknowable, rather than print a number with nothing
+     * behind it.
+     */
+    if (state.win?.placeholder) return null;
 
     /*
      * A daily average run forward is the wrong shape for this. Spending is capped per window,
@@ -1842,7 +1867,11 @@
         </div>
         ${right}
       </div>
-      ${projection ? periodCumulativeChartHtml(projection) : `<div class="readout" style="margin-top:14px"><span>${esc(L.projNotYet)}</span></div>`}
+      ${
+        projection
+          ? periodCumulativeChartHtml(projection)
+          : `<div class="readout" style="margin-top:14px"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
+      }
       ${
         projection
           ? `<div class="readout" style="margin-top:10px"><span>${esc(
@@ -1983,6 +2012,7 @@
     const items = [
       [L.n1, false],
       [L.n2(USD_PER_CREDIT), false],
+      ...(state.ent?.liveSubscriptions > 1 ? [[L.twoSubscriptions(state.ent.liveSubscriptions, win?.planType || "?"), true]] : []),
       ...(win?.placeholder ? [[L.placeholderWindow, true]] : []),
       ...(win && !win.placeholder && !win.resetBank ? [[L.bankEmpty, false]] : []),
       ...(days.some((d) => d.pricedAtTopRate) ? [[L.topRateWarning, true]] : []),
@@ -2013,10 +2043,11 @@
   function windowLabel() {
     const L = t();
     const days = state.win.windowSec / 86400;
-    if (days < 1) return L.windowHours(state.win.planType, Math.round(state.win.windowSec / 3600));
+    if (days < 1) return L.windowHours(state.win.email ? `${state.win.planType} · ${state.win.email}` : state.win.planType, Math.round(state.win.windowSec / 3600));
 
     const shown = Number.isInteger(days) ? String(days) : days.toFixed(1);
-    return L.window(state.win.planType, shown);
+    const who = state.win.email ? `${state.win.planType} · ${state.win.email}` : state.win.planType;
+    return L.window(who, shown);
   }
 
   function triggerHtml() {
