@@ -128,6 +128,8 @@
 
       plusBank: (n, a) => `Plus ${n} reset card${n === 1 ? "" : "s"} still in the bank, worth ${a} if you spend them.`,
       bankEmpty: "The reset bank is empty, so no allowance can be opened ahead of schedule.",
+      projCapped: (paced, n, one) => `The pace alone would reach ${paced}, but only ${n} more allowance${n === 1 ? "" : "s"} of about ${one} open before renewal — spending is capped per window, not per day, so the windows decide this, not the rate.`,
+      projCeilingRoom: (cap, n) => `${n} more allowance${n === 1 ? "" : "s"} open before renewal, so the period cannot exceed ${cap} however fast you go.`,
       periodGranted: "Allowance this payment bought",
       grantedUnknown: (n) => `${n} allowances opened in this period, but not all the same size — the allowance changed partway through, so there is no single figure to multiply by. The spend on the left is unaffected.`,
       periodWindows: (n, l) => `${n} allowances of about ${l}`,
@@ -281,6 +283,8 @@
 
       plusBank: (n, a) => `另外银行里还有 ${n} 张重置券，用掉的话相当于再多 ${a}。`,
       bankEmpty: "重置券已经用完，没法再提前开出新的额度了。",
+      projCapped: (paced, n, one) => `光按节奏推会到 ${paced}，但续费前只会再开 ${n} 份额度、每份约 ${one} —— 花钱是按窗口封顶的，不是按天，所以决定这个数的是窗口，不是速度。`,
+      projCeilingRoom: (cap, n) => `续费前还会开 ${n} 份额度，所以不管你跑多快，整期都不会超过 ${cap}。`,
       periodGranted: "这笔订阅费买到的额度",
       grantedUnknown: (n) => `这个账期里开出了 ${n} 份额度，但大小不一样 —— 中途额度变过，没有一个统一的数可以拿来乘。左边的花费不受影响。`,
       periodWindows: (n, l) => `${n} 份额度，每份约 ${l}`,
@@ -1091,8 +1095,25 @@
 
     if (basisDays < 3 || basisSpend <= 0 || activeDays < 2 || remainingDays <= 0) return null;
 
+    /*
+     * A daily average run forward is the wrong shape for this. Spending is capped per window,
+     * not per day: burn the whole allowance on the first morning and the rest of that window
+     * yields nothing, no matter how fast you were going. Extrapolating the rate through the
+     * cap produces totals the account could not reach even in principle — on the account this
+     * was found on, $2,568 against a structural maximum of $1,530.
+     *
+     * What actually decides the period is how many allowances open before renewal. The rate
+     * only says whether you will get through them.
+     */
     const rate = basisSpend / basisDays;
-    const projected = Math.max(measured, basisSpend + rate * remainingDays);
+    const paced = Math.max(measured, basisSpend + rate * remainingDays);
+
+    const proj = projectToRenewal();
+    const ceiling = cycleReading()?.ceiling;
+    const obtainable = proj && proj.allowance != null ? proj.allowance : null;
+    const cap = obtainable != null ? measured + obtainable : null;
+
+    const projected = cap != null ? Math.min(paced, cap) : paced;
 
     return {
       p,
@@ -1105,6 +1126,11 @@
       activeDays,
       remainingDays,
       rate,
+      paced,
+      cap,
+      ceiling,
+      openings: proj?.openings ?? null,
+      capBinds: cap != null && paced > cap,
       projected,
       early: basisDays / periodDays < 0.2,
     };
@@ -1823,6 +1849,13 @@
               L.projBasis(usd(projection.rate), projection.basisDays, shortDate(dayKey(p.fullEndMs)), projection.remainingDays),
             )}</span></div>
              <div class="readout"><span>${esc(L.projFloor(usd(projection.measured)))}</span></div>
+             ${
+               projection.capBinds
+                 ? `<div class="readout"><span>${esc(L.projCapped(usd(projection.paced), projection.openings, usd(projection.ceiling)))}</span></div>`
+                 : projection.cap != null
+                   ? `<div class="readout"><span>${esc(L.projCeilingRoom(usd(projection.cap), projection.openings))}</span></div>`
+                   : ""
+             }
              ${projection.early ? `<div class="readout"><span>${esc(L.projEarly)}</span></div>` : ""}`
           : ""
       }
