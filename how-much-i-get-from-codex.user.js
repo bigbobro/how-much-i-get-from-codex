@@ -103,6 +103,12 @@
       inferred: "Inferred",
       noCeiling: (p) => `${p}% used — not enough yet to infer a ceiling`,
       measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
+      usedAllowances: (n) => `${n} allowances used in this range`,
+      overspent: (n) => `More than one allowance shows in this cycle — ${n} of them. The window reset partway through, so "left" is the remainder of the current one.`,
+      allowanceChanged: (n) => `${n} earlier day${n === 1 ? "" : "s"} imply a different allowance, so the plan changed in this range. Only days matching today are counted.`,
+      topRateWarning: "Some days have no per-model split and no reported credits, so they are priced at the dearest model's rate. Those days read high.",
+      placeholderWindow: "This plan never opens the rate limit window — it reports 0% used and a reset that keeps sliding forward. Cycle boundaries and anything counted from them are hidden; the allowance and the spending below are unaffected.",
+      oneAllowance: "one allowance",
       allowanceNote: (n) => `The allowance is measured, not inferred: each day's cost divided by the percentage of the allowance the API says that day consumed. Checked across ${n} day${n === 1 ? "" : "s"} here.`,
       windowTooShort: "The allowance window is shorter than a day, but usage only arrives in whole days — there is nothing to divide.",
       leftSuffix: (p) => `left (${p})`,
@@ -247,6 +253,12 @@
       inferred: "推算",
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
       measuredFrom: (n) => `由 ${n} 天用量测出`,
+      usedAllowances: (n) => `这段时间用掉 ${n} 份额度`,
+      overspent: (n) => `本周期里出现了不止一份额度 —— ${n} 份。中途重置过，所以「剩余」指的是当前这一份还剩多少。`,
+      allowanceChanged: (n) => `另外 ${n} 天推出来的额度跟今天不一样，说明这段时间里换过套餐。只采用与今天一致的那些天。`,
+      topRateWarning: "有些天既没有按模型拆分、接口也没给 credits，只能按最贵的模型计价。这些天会偏高。",
+      placeholderWindow: "这个套餐从不真正开启限流窗口 —— 它报 0% 已用，重置时间一直往前滑。周期边界以及从边界数出来的东西已隐藏；额度和下面的花费不受影响。",
+      oneAllowance: "一份额度",
       allowanceNote: (n) => `额度是测出来的，不是推的：拿每天的花费，除以接口说这天用掉了额度的百分之几。这里用了 ${n} 天的数据交叉核对。`,
       windowTooShort: "这个账号的额度窗口不到一天，而用量只能按整天取 —— 没有可除的东西。",
       leftSuffix: (p) => `未用（${p}）`,
@@ -481,6 +493,13 @@
       limitReached: !!usage.rate_limit.limit_reached,
       windowSec,
       inferable: windowSec >= MIN_INFERABLE_WINDOW_SEC,
+      /*
+       * Some plans never open the window at all: used_percent stays at zero and reset_at is
+       * simply now plus the window length, sliding forward on every request. Its boundaries
+       * are fiction, so anything anchored to them would be reinvented on each fetch.
+       */
+      placeholder:
+        !(Number(w.used_percent) > 0) && Math.abs(resetAt - (Date.now() + windowSec * 1000)) < 90000,
       resetAt,
       startAt: resetAt - windowSec * 1000,
       planType: usage.plan_type,
@@ -507,7 +526,6 @@
     return {
       renewsAt: Date.parse(pick.entitlement.renews_at),
       billingPeriod: pick.entitlement.billing_period,
-      matchedStructure: pick.account?.structure || null,
     };
   }
 
@@ -655,19 +673,32 @@
         day.output = totals.text_output_tokens || 0;
         day.credits = totals.credits > 0 ? totals.credits : totalsPrice.credits;
 
-        // Split the day's money across models using OpenAI's own per-model shares.
-        const shares = modelPercentByDate.get(row.date) || [];
-        const shareTotal = shares.reduce((a, m) => a + (m.credits || 0), 0);
+        // No per-model tokens were priced, so the day total stands in. Where it came from
+        // the rate card rather than the API, sol's rates priced everything and a mini-heavy
+        // day is overstated several times over — say so rather than let it pass as fact.
+        if (!(totals.credits > 0)) day.pricedAtTopRate = true;
+
+        /*
+         * Split the day's money across models using OpenAI's own per-model shares.
+         *
+         * Turns are reported once per model name, so a model's share of the DAY is the wrong
+         * divisor for them — it would shrink every model's turns by its own credit share and
+         * hand the per-turn crown to whichever model ran fewest turns. Turns only need
+         * splitting between a model's own speed rows.
+         */
+        const shares = (modelPercentByDate.get(row.date) || []).filter((m) => m.credits);
+        const shareTotal = shares.reduce((a, m) => a + m.credits, 0);
+        const withinModel = new Map();
+        for (const m of shares) withinModel.set(m.model, (withinModel.get(m.model) || 0) + m.credits);
+
         for (const m of shares) {
-          if (!m.credits) continue;
           const part = m.credits / shareTotal;
           models.push({
             model: m.model,
             speed: m.speed || "standard",
             credits: day.credits * part,
-            turns: (activity.perModel.get(m.model) || 0) * part,
+            turns: (activity.perModel.get(m.model) || 0) * (m.credits / withinModel.get(m.model)),
             tokens: (totals.text_total_tokens || 0) * part,
-            approximate: true,
           });
         }
 
@@ -676,13 +707,22 @@
         day.cachedCredits = totalsPrice.cached * scale;
         day.outputCredits = totalsPrice.output * scale;
       } else if (totals.credits > 0) {
-        // Same preference when the split exists: keep the shape, correct the magnitude.
-        const scale = totals.credits / day.credits;
-        for (const k of ["credits", "uncachedCredits", "cachedCredits", "outputCredits", "fastCredits"]) day[k] *= scale;
-        for (const m of models) m.credits *= scale;
+        /*
+         * Same preference when the split exists: keep the shape, correct the magnitude.
+         * A day whose models are all unknown to the rate card prices at zero, and scaling by
+         * a zero denominator turns every field into NaN — which then slips past a `<= 0`
+         * guard, because NaN fails every comparison. Take the reported total instead.
+         */
+        if (day.credits > 0) {
+          const scale = totals.credits / day.credits;
+          for (const k of ["credits", "uncachedCredits", "cachedCredits", "outputCredits", "fastCredits"]) day[k] *= scale;
+          for (const m of models) m.credits *= scale;
+        } else {
+          day.credits = totals.credits;
+        }
       }
 
-      if (day.credits <= 0) continue;
+      if (!(day.credits > 0)) continue;
       days.push(day);
     }
 
@@ -917,8 +957,9 @@
    */
   function periodAllowances() {
     // Without a renewal date there is no billing period, and counting allowances "per
-    // payment" would be a claim about something we cannot see.
-    if (!state.ent) return null;
+    // payment" would be a claim about something we cannot see. Same for a placeholder
+    // window: its openings would be counted from a boundary that moves on every fetch.
+    if (!state.ent || state.win?.placeholder) return null;
 
     const W = state.win ? state.win.windowSec * 1000 : 0;
     if (!W) return null;
@@ -963,16 +1004,26 @@
     const samples = state.days.filter((d) => d.percent > 0 && d.credits > 0);
     if (!samples.length) return null;
 
-    const perPercent = samples.map((d) => d.credits / d.percent).sort((a, b) => a - b);
-    const median = perPercent[Math.floor(perPercent.length / 2)];
+    /*
+     * The ratio holds only while the plan does. An upgrade mid-range splits the samples into
+     * two clusters, and a median over both would report whichever cluster is larger — often
+     * the plan you are no longer on — with full confidence. Anchor on the newest reading and
+     * keep only what agrees with it; what disagrees describes the past, not today.
+     */
+    const byDateDesc = [...samples].sort((a, b) => b.date.localeCompare(a.date));
+    const newest = byDateDesc[0].credits / byDateDesc[0].percent;
+    if (!(newest > 0)) return null;
+
+    const agreeing = byDateDesc.filter((d) => Math.abs(d.credits / d.percent - newest) / newest <= 0.02);
+    const ratios = agreeing.map((d) => d.credits / d.percent).sort((a, b) => a - b);
+    const median = ratios[Math.floor(ratios.length / 2)];
     if (!(median > 0)) return null;
 
     return {
       credits: median * 100,
-      samples: samples.length,
-      // How far the worst sample strays. Near zero means the reading is solid; a wide spread
-      // means the allowance changed inside the range and only the newest days describe today.
-      spread: perPercent.length > 1 ? (perPercent[perPercent.length - 1] - perPercent[0]) / median : 0,
+      samples: agreeing.length,
+      // Days whose ratio disagrees with today's — evidence the allowance changed in range.
+      dropped: samples.length - agreeing.length,
     };
   }
 
@@ -1057,7 +1108,7 @@
    */
   function cycleSegments() {
     const r = cycleReading();
-    if (!state.win || !r || !state.win.inferable) return null;
+    if (!state.win || !r || !state.win.inferable || state.win.placeholder) return null;
 
     const W = state.win.windowSec * 1000;
 
@@ -1190,7 +1241,7 @@
       background: var(--panel); color: var(--ink);
       border: 1px solid var(--rule); border-radius: 5px;
       box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px -14px rgba(0,0,0,.4);
-      font-family: var(--sans); cursor: grab; touch-action: none; user-select: none;
+      font-family: var(--sans); cursor: pointer;
       transition: box-shadow .18s, transform .18s;
     }
     .trigger:hover { box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 30px -14px rgba(0,0,0,.5); transform: translateY(-1px); }
@@ -1369,9 +1420,15 @@
     const elapsedDays = Math.max(0.5, (now - win.startAt) / DAY_MS);
     const perDay = r.s.credits / elapsedDays;
     const enoughElapsed = (now - win.startAt) / DAY_MS >= 2;
-    const remaining = r.ceiling ? r.ceiling - r.s.credits : null;
-    const runOutMs = remaining != null && perDay > 0 ? now + (remaining / perDay) * DAY_MS : null;
-    const willRunOut = runOutMs != null && runOutMs < win.resetAt;
+    /*
+     * A measured ceiling is one allowance, and day buckets can hold more than one — a boundary
+     * day shared with the previous window, or a reset genuinely crossed mid-cycle. Unclamped
+     * this prints a negative remainder and an alarm dated in the past.
+     */
+    const remaining = r.ceiling ? Math.max(0, r.ceiling - r.s.credits) : null;
+    const overspent = r.ceiling ? r.s.credits > r.ceiling : false;
+    const runOutMs = remaining > 0 && perDay > 0 ? now + (remaining / perDay) * DAY_MS : null;
+    const willRunOut = runOutMs != null && runOutMs > now && runOutMs < win.resetAt;
 
     return `
       <div class="gauge-head">
@@ -1415,6 +1472,11 @@
             : `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
       }
 
+      ${
+        overspent
+          ? `<p class="verdict">${esc(L.overspent(allowancesUsed(dayKey(win.startAt), dayKey(now)).toFixed(1)))}</p>`
+          : ""
+      }
       <div class="readout">
         ${r.ceiling ? `<span><b class="inf">${usd(remaining)}</b> ${esc(L.leftSuffix(pct(1 - ratio)))}</span>` : ""}
         ${!r.ceiling && win.inferable && enoughElapsed ? `<span>${esc(L.noCeiling(Math.round(r.used)))}</span>` : ""}
@@ -1589,8 +1651,8 @@
       .map((n) => `<line class="axis" x1="${left}" x2="${width - right}" y1="${y(max * n)}" y2="${y(max * n)}"><title>Grid</title></line>`)
       .join("");
     const ceilingLine = ceiling
-      ? `<line x1="${left}" x2="${width - right}" y1="${y(ceiling)}" y2="${y(ceiling)}" stroke="var(--inferred)" stroke-width="1" stroke-dasharray="4 4"><title>${esc(`${L.ceiling} ${usd(ceiling)}`)}</title></line>
-         <text x="${width - right}" y="${y(ceiling) - 4}" text-anchor="end">${esc(usd(ceiling))}</text>`
+      ? `<line x1="${left}" x2="${width - right}" y1="${y(ceiling)}" y2="${y(ceiling)}" stroke="var(--inferred)" stroke-width="1" stroke-dasharray="4 4"><title>${esc(`${L.oneAllowance} ${usd(ceiling)}`)}</title></line>
+         <text x="${width - right}" y="${y(ceiling) - 4}" text-anchor="end">${esc(`${L.oneAllowance} ${usd(ceiling)}`)}</text>`
       : "";
 
     return `
@@ -1744,6 +1806,13 @@
       }
       <div class="readout" style="margin-top:${granted ? "6px" : projection ? "10px" : "14px"}">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
+        ${
+          /* Allowances used, counted straight from the daily percentages — the one figure
+             that needs nothing assumed about when the window resets. */
+          cycleReading()?.measured
+            ? `<span>${esc(L.usedAllowances(allowancesUsed(p.from, dayKey(Date.now())).toFixed(1)))}</span>`
+            : ""
+        }
         <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
         <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
         <span>${esc(L.turnsTotal(int(s.turns)))}</span>
@@ -1845,6 +1914,9 @@
     const items = [
       [L.n1, false],
       [L.n2(USD_PER_CREDIT), false],
+      ...(win?.placeholder ? [[L.placeholderWindow, true]] : []),
+      ...(days.some((d) => d.pricedAtTopRate) ? [[L.topRateWarning, true]] : []),
+      ...(cycleReading()?.measured?.dropped ? [[L.allowanceChanged(cycleReading().measured.dropped), true]] : []),
       ...(cycleReading()?.measured
         ? [[L.allowanceNote(cycleReading().measured.samples), false]]
         : win && !win.inferable

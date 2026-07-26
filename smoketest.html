@@ -22,6 +22,8 @@ the real script would never have fetched.</p>
   <li><a href="#personal">#personal</a> — a Plus-style account: the workspace breakdown 400s,
       credits come from the counts endpoint, and the allowance is measured from the daily
       percentages. Expect an allowance of <b>$199.59</b>.</li>
+  <li><a href="#unknownmodel">#unknownmodel</a> — a metered day whose only model is missing
+      from the rate card. Must fall back to the reported credits, never show NaN.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
       Must fall back to the calendar month and drop every billing-period claim.</li>
   <li><a href="#projection">#projection</a> — a freshly reset 30.4-day window reports 0%, while five active
@@ -59,13 +61,15 @@ const REAL_MODELS = [
     text_output_tokens: 5347, text_total_tokens: 392634 },
 ];
 
-const scale = (models, k) => models.map(m => ({
+function sum(models, field) { return models.reduce((a, m) => a + (m[field] || 0), 0); }
+
+function scale(models, k) { return models.map(m => ({
   ...m,
   uncached_text_input_tokens: Math.round(m.uncached_text_input_tokens * k),
   cached_text_input_tokens: Math.round(m.cached_text_input_tokens * k),
   text_output_tokens: Math.round(m.text_output_tokens * k),
   text_total_tokens: Math.round(m.text_total_tokens * k),
-}));
+})); }
 
 const breakdownRow = (date, models) => ({
   date,
@@ -78,7 +82,10 @@ const breakdownRow = (date, models) => ({
 const countsRow = (date, turns, threads) => ({
   date,
   totals: { users: 1, threads, turns, credits: CREDITS_FOR(date), on_demand_credits: 0,
-    uncached_text_input_tokens: 0, cached_text_input_tokens: 0, text_output_tokens: 0, text_total_tokens: 0 },
+    uncached_text_input_tokens: TOKENS_FOR(date, "uncached_text_input_tokens"),
+    cached_text_input_tokens: TOKENS_FOR(date, "cached_text_input_tokens"),
+    text_output_tokens: TOKENS_FOR(date, "text_output_tokens"),
+    text_total_tokens: TOKENS_FOR(date, "text_total_tokens") },
   clients: [{ client_id: "CODEX_CLI", users: 1, threads, turns }],
   models: [
     { model: "gpt-5.4",      credits: 0, users: 1, threads: 1, turns: Math.max(1, Math.round(turns * 0.06)) },
@@ -151,6 +158,20 @@ if (MODE === "multi") {
     { at: open6 -  4 * DAY, k: 0.20, turns: 8,  threads: 2 },
     { at: open6,               k: 0.15, turns: 6,  threads: 1 },  // inside the current cycle
   ];
+} else if (MODE === "unknownmodel") {
+  // A model OpenAI ships that the rate card has never heard of, on a plan that meters
+  // credits. Rate-card pricing yields zero; the reported credits must take over instead of
+  // scaling by a zero denominator.
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 25;
+  RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
+  DAYS = [{ at: NOON - 2 * DAY, k: 0.5, turns: 9, threads: 2 }];
+  MODELS_FOR = () => [
+    { model: "gpt-6.0-nova", speed: "standard", credits: 0,
+      uncached_text_input_tokens: 2000000, cached_text_input_tokens: 30000000,
+      text_output_tokens: 400000, text_total_tokens: 32400000 },
+  ];
 } else if (MODE === "personal") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
@@ -193,11 +214,12 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = MODE === "personal";
+const METERED = MODE === "personal" || MODE === "unknownmodel";
 const DAY_CREDITS = METERED
   ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * d.k * 0.5 * 10) / 10]))
   : {};
 function CREDITS_FOR(date) { return DAY_CREDITS[date] || 0; }
+
 
 const PERCENTS = { units: "percent", group_by: "day", data: (METERED ? DAYS : []).map(d => {
   const date = utcDay(d.at);
@@ -208,6 +230,16 @@ const PERCENTS = { units: "percent", group_by: "day", data: (METERED ? DAYS : []
 })};
 
 const modelsFor = MODELS_FOR || ((d) => scale(REAL_MODELS, d.k));
+
+// The counts endpoint reports tokens on every plan type, so the fixtures must too — the
+// rate-card-shape fallback and the reported-credits rescale only run when they are present.
+const DAY_TOKENS = Object.fromEntries(DAYS.map(d => {
+  const models = modelsFor(d);
+  return [utcDay(d.at), Object.fromEntries(
+    ["uncached_text_input_tokens", "cached_text_input_tokens", "text_output_tokens", "text_total_tokens"]
+      .map(f => [f, sum(models, f)]))];
+}));
+function TOKENS_FOR(date, field) { return DAY_TOKENS[date]?.[field] || 0; }
 
 const BREAKDOWN = { units: "credits", group_by: "day",
   data: DAYS.map(d => breakdownRow(utcDay(d.at), modelsFor(d))) };
