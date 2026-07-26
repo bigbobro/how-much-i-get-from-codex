@@ -72,6 +72,16 @@ is how much of an allowance that day consumed, so summing them counts allowances
 crossing 100% simply means another one was used. Nothing has to be assumed about when the
 window will reset next.
 
+### Allowances come from two places, and both are readable
+
+A window rolling on its own schedule is one source. A **reset card**, spent by hand to open a
+fresh allowance early, is the other — which is why a week can hold several allowances rather
+than one. `rate_limit_reset_credits.available_count` says how many are left.
+
+That is what turns the forecast from a guess into arithmetic. Nothing has to be assumed about
+when the next reset lands: the scheduled ones step forward from a fixed `reset_at`, and the
+early ones are capped by a number the API hands over.
+
 ### Why the credits step is exact, not an estimate
 
 Because it was checked. `/backend-api/wham/usage/daily-token-usage-breakdown` returns

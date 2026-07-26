@@ -126,6 +126,8 @@
         (partial ? " — a window hands over the whole amount even with days left to spend it" : ""),
       renewalOneCycle: (a) => `${a} left — the subscription renews before this cycle does`,
 
+      plusBank: (n, a) => `Plus ${n} reset card${n === 1 ? "" : "s"} still in the bank, worth ${a} if you spend them.`,
+      bankEmpty: "The reset bank is empty, so no allowance can be opened ahead of schedule.",
       periodGranted: "Allowance this payment bought",
       periodWindows: (n, l) => `${n} allowances of about ${l}`,
       periodResets: (n) => `the window reset ${n} time${n > 1 ? "s" : ""} inside the billing period`,
@@ -276,6 +278,8 @@
         (partial ? " —— 窗口一开就是满额发放，哪怕只剩几天用" : ""),
       renewalOneCycle: (a) => `本周期还剩 ${a} —— 订阅比周期先续`,
 
+      plusBank: (n, a) => `另外银行里还有 ${n} 张重置券，用掉的话相当于再多 ${a}。`,
+      bankEmpty: "重置券已经用完，没法再提前开出新的额度了。",
       periodGranted: "这笔订阅费买到的额度",
       periodWindows: (n, l) => `${n} 份额度，每份约 ${l}`,
       periodResets: (n) => `账期内额度重置了 ${n} 次`,
@@ -482,6 +486,14 @@
     const w = usage?.rate_limit?.primary_window;
     if (!w) return null;
 
+    /*
+     * Allowances arrive from two places, and both are readable, which is what makes the
+     * forecast something other than a guess. One is the window rolling on its own fixed
+     * schedule. The other is a reset card, spent by hand to open a fresh allowance early —
+     * the reason a week can hold far more than one. The bank says exactly how many are left.
+     */
+    const bank = Number(usage?.rate_limit_reset_credits?.available_count) || 0;
+
     const windowSec = Number(w.limit_window_seconds);
     const resetAt = Number(w.reset_at) * 1000;
     if (!Number.isFinite(windowSec) || windowSec <= 0 || !Number.isFinite(resetAt)) return null;
@@ -502,6 +514,7 @@
         !(Number(w.used_percent) > 0) && Math.abs(resetAt - (Date.now() + windowSec * 1000)) < 90000,
       resetAt,
       startAt: resetAt - windowSec * 1000,
+      resetBank: bank,
       planType: usage.plan_type,
     };
   }
@@ -1187,7 +1200,9 @@
      * time, not allowance. So the allowance counts openings at full value, while the
      * expectation counts the hours you actually have, at the pace of the last finished cycle.
      */
-    const openings = seg.openings;
+    // Every card in the bank is one more allowance that can be opened before renewal.
+    const bank = state.win.resetBank || 0;
+    const openings = seg.openings + bank;
     const usableTime = Math.max(0, state.ent.renewsAt - state.win.resetAt) / W;
     const basis = seg.lastFull ? seg.lastFull.spend : Math.min(r.ceiling, perMs * W);
 
@@ -1197,6 +1212,8 @@
       seg,
       leftThisCycle,
       openings,
+      bank,
+      naturalOpenings: seg.openings,
       hasPartial: usableTime % 1 > 0.001,
       allowance: leftThisCycle + openings * r.ceiling,
       expected: restOfThisCycle + usableTime * basis,
@@ -1496,7 +1513,9 @@
     const L = t();
     const left = usd(proj.leftThisCycle);
     if (!proj.openings) return L.renewalOneCycle(left);
-    return L.renewalMath(left, proj.openings, usd(proj.ceiling), proj.hasPartial);
+
+    const base = L.renewalMath(left, proj.naturalOpenings, usd(proj.ceiling), proj.hasPartial);
+    return proj.bank ? `${base} ${L.plusBank(proj.bank, usd(proj.bank * proj.ceiling))}` : base;
   }
 
   function forecastHtml() {
@@ -1915,6 +1934,7 @@
       [L.n1, false],
       [L.n2(USD_PER_CREDIT), false],
       ...(win?.placeholder ? [[L.placeholderWindow, true]] : []),
+      ...(win && !win.placeholder && !win.resetBank ? [[L.bankEmpty, false]] : []),
       ...(days.some((d) => d.pricedAtTopRate) ? [[L.topRateWarning, true]] : []),
       ...(cycleReading()?.measured?.dropped ? [[L.allowanceChanged(cycleReading().measured.dropped), true]] : []),
       ...(cycleReading()?.measured

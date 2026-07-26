@@ -24,6 +24,8 @@ the real script would never have fetched.</p>
       percentages. Expect an allowance of <b>$199.59</b>.</li>
   <li><a href="#unknownmodel">#unknownmodel</a> — a metered day whose only model is missing
       from the rate card. Must fall back to the reported credits, never show NaN.</li>
+  <li><a href="#bank">#bank</a> — two reset cards left. They are allowances too, so the
+      forecast must count them on top of the windows that roll on their own.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
       Must fall back to the calendar month and drop every billing-period claim.</li>
   <li><a href="#projection">#projection</a> — a freshly reset 30.4-day window reports 0%, while five active
@@ -172,6 +174,12 @@ if (MODE === "multi") {
       uncached_text_input_tokens: 2000000, cached_text_input_tokens: 30000000,
       text_output_tokens: 400000, text_total_tokens: 32400000 },
   ];
+} else if (MODE === "bank") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 40;
+  RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
+  DAYS = [{ at: NOON - 4 * DAY, k: 0.6, turns: 25, threads: 5 }, { at: NOON - 1 * DAY, k: 0.5, turns: 20, threads: 4 }];
 } else if (MODE === "personal") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
@@ -247,6 +255,9 @@ const COUNTS = { group_by: "day", data: DAYS.map(d => countsRow(utcDay(d.at), d.
 const ATTRIBUTION = { group: "workspace", group_by: "day",
   data: DAYS.map(d => ({ date: utcDay(d.at),
     code_attribution: { lines_of_code: { added: Math.round(2400 * d.k), removed: Math.round(600 * d.k) } } })) };
+// Reset cards open an allowance early; #bank is the scenario where some are left.
+const RESET_BANK = MODE === "bank" ? 2 : 0;
+
 const USAGE = {
   plan_type: "team",
   rate_limit: {
@@ -260,6 +271,7 @@ const USAGE = {
     secondary_window: null,
   },
   credits: { has_credits: false, unlimited: false, balance: null },
+  rate_limit_reset_credits: { available_count: RESET_BANK, applicable_available_count: RESET_BANK },
 };
 
 const CHECK = { accounts: { "4456f2d2": { entitlement: {
