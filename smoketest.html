@@ -24,6 +24,9 @@ the real script would never have fetched.</p>
       percentages. Expect an allowance of <b>$199.59</b>.</li>
   <li><a href="#unknownmodel">#unknownmodel</a> — a metered day whose only model is missing
       from the rate card. Must fall back to the reported credits, never show NaN.</li>
+  <li><a href="#changed">#changed</a> — the allowance doubles partway through the range.
+      The reading must follow today's ($399.18), not average the two, and must say how many
+      earlier days it disregarded.</li>
   <li><a href="#bank">#bank</a> — two reset cards left. They are allowances too, so the
       forecast must count them on top of the windows that roll on their own.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
@@ -174,6 +177,21 @@ if (MODE === "multi") {
       uncached_text_input_tokens: 2000000, cached_text_input_tokens: 30000000,
       text_output_tokens: 400000, text_total_tokens: 32400000 },
   ];
+} else if (MODE === "changed") {
+  // Two weeks on one allowance, then an upgrade doubles it. The reading must follow today,
+  // not average the two, and it must say how many days it disregarded.
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 30;
+  RENEWS_AT = new Date(NOW + 18 * DAY).toISOString();
+  DAYS = [
+    { at: NOON - 11 * DAY, k: 0.5, turns: 20, threads: 4 },
+    { at: NOON - 10 * DAY, k: 0.6, turns: 24, threads: 4 },
+    { at: NOON -  9 * DAY, k: 0.4, turns: 16, threads: 3 },
+    { at: NOON -  5 * DAY, k: 0.5, turns: 21, threads: 4, big: true },
+    { at: NOON -  3 * DAY, k: 0.6, turns: 26, threads: 5, big: true },
+    { at: NOON -  1 * DAY, k: 0.45, turns: 18, threads: 3, big: true },
+  ];
 } else if (MODE === "bank") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
@@ -222,16 +240,19 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = MODE === "personal" || MODE === "unknownmodel";
+const METERED = MODE === "personal" || MODE === "unknownmodel" || MODE === "bank" || MODE === "changed";
 const DAY_CREDITS = METERED
-  ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * d.k * 0.5 * 10) / 10]))
+  ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * (d.big ? 2 : 1) * d.k * 0.5 * 10) / 10]))
   : {};
+// A day's percentage is always relative to the allowance in force THAT day, so a doubled
+// allowance halves the percentage a given spend consumes. That is the signal to detect.
+const DAY_ALLOWANCE = Object.fromEntries(DAYS.map(d => [utcDay(d.at), ALLOWANCE_CREDITS * (d.big ? 2 : 1)]));
 function CREDITS_FOR(date) { return DAY_CREDITS[date] || 0; }
 
 
 const PERCENTS = { units: "percent", group_by: "day", data: (METERED ? DAYS : []).map(d => {
   const date = utcDay(d.at);
-  const pct = (DAY_CREDITS[date] / ALLOWANCE_CREDITS) * 100;
+  const pct = (DAY_CREDITS[date] / DAY_ALLOWANCE[date]) * 100;
   return { date, product_surface_usage_values: { cli: pct, vscode: 0, web: 0, unknown: 0 },
     models: [{ model: "gpt-5.6-sol", speed: "standard", credits: pct * 0.95 },
              { model: "gpt-5.4-mini", speed: "standard", credits: pct * 0.05 }] };

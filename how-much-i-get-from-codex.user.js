@@ -129,6 +129,7 @@
       plusBank: (n, a) => `Plus ${n} reset card${n === 1 ? "" : "s"} still in the bank, worth ${a} if you spend them.`,
       bankEmpty: "The reset bank is empty, so no allowance can be opened ahead of schedule.",
       periodGranted: "Allowance this payment bought",
+      grantedUnknown: (n) => `${n} allowances opened in this period, but not all the same size — the allowance changed partway through, so there is no single figure to multiply by. The spend on the left is unaffected.`,
       periodWindows: (n, l) => `${n} allowances of about ${l}`,
       periodResets: (n) => `the window reset ${n} time${n > 1 ? "s" : ""} inside the billing period`,
       periodNoReset: "one allowance — the window did not reset inside the billing period",
@@ -281,6 +282,7 @@
       plusBank: (n, a) => `另外银行里还有 ${n} 张重置券，用掉的话相当于再多 ${a}。`,
       bankEmpty: "重置券已经用完，没法再提前开出新的额度了。",
       periodGranted: "这笔订阅费买到的额度",
+      grantedUnknown: (n) => `这个账期里开出了 ${n} 份额度，但大小不一样 —— 中途额度变过，没有一个统一的数可以拿来乘。左边的花费不受影响。`,
       periodWindows: (n, l) => `${n} 份额度，每份约 ${l}`,
       periodResets: (n) => `账期内额度重置了 ${n} 次`,
       periodNoReset: "一份额度 —— 账期内窗口没有重置过",
@@ -1781,8 +1783,18 @@
     const L = t();
     const p = periodRange();
     const grant = periodAllowances();
-    const ceiling = cycleReading()?.ceiling;
-    const granted = grant && ceiling ? grant.windows * ceiling : null;
+    const reading = cycleReading();
+    const ceiling = reading?.ceiling;
+
+    /*
+     * "N windows × today's allowance" is the truth only while the allowance held still for
+     * all N. Changed partway through, the earlier windows were a different size and the
+     * product overstates what the payment bought — by 43% on a doubling. There is no
+     * reliable per-window history to multiply instead, so the figure is withheld rather than
+     * stated wrongly. The spend beside it is unaffected; it sums real credits.
+     */
+    const allowanceChanged = !!reading?.measured?.dropped;
+    const granted = grant && ceiling && !allowanceChanged ? grant.windows * ceiling : null;
     const projection = projectPeriodSpend();
     const right = projection
       ? `<div class="right">
@@ -1821,6 +1833,11 @@
                <span>${esc(grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset)}</span>
                <span>${esc(L.periodFloor)}</span>
              </div>`
+          : ""
+      }
+      ${
+        allowanceChanged && grant
+          ? `<div class="readout" style="margin-top:10px"><span>${esc(L.grantedUnknown(grant.windows))}</span></div>`
           : ""
       }
       <div class="readout" style="margin-top:${granted ? "6px" : projection ? "10px" : "14px"}">
