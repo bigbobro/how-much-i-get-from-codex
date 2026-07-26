@@ -2,9 +2,11 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      1.0.0
+// @version      2.4.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
+// @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
+// @updateURL    https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
 // @description  Work out the Codex spending ceiling OpenAI never tells you. Exact per-model pricing from the official rate card, the cycle limit inferred from the used percentage, and a projection of what is left before your subscription renews. Reads nothing until you open it.
 // @description:zh-CN 算出 OpenAI 从不告诉你的那个数字。按官方 rate card 逐模型精确计价，用已用百分比反推本周期额度，再推算到订阅续费日之前你还能拿到多少。不点开就不发任何请求。
 // @match        https://chatgpt.com/codex/cloud/settings/analytics*

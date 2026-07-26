@@ -6,9 +6,9 @@
 
 官方页面只给一根进度条——*Monthly usage limit，还剩 70%*。70% 的什么？分母从来没在任何地方出现过。这个脚本把它从接口里读出来。
 
-![](docs/panel-light.jpg)
+![](docs/panel.jpg)
 
-<sub>深色：<a href="docs/panel-dark.jpg">docs/panel-dark.jpg</a></sub>
+<sub>跟随浏览器的浅色 / 深色主题。</sub>
 
 给 Plus、Pro、Business、Team 用户里那些用 Codex 用到会想「这订阅到底值多少」的人。
 
@@ -125,11 +125,11 @@
 
 ## 安装
 
-仓库是私有的，一键 raw 链接打不开，手动装：
-
 1. 装 [Tampermonkey](https://www.tampermonkey.net/)
-2. 在面板里新建脚本，把 [`how-much-i-get-from-codex.user.js`](how-much-i-get-from-codex.user.js) 的内容粘进去
+2. 点 **[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)**，Tampermonkey 会自己接住
 3. 打开 <https://chatgpt.com/codex/cloud/settings/analytics>，点右上角那个标签
+
+更新走 `@updateURL` 指回这个仓库，所以往这里推一次，装过的人都能收到。
 
 界面语言跟随浏览器，也可以在面板里切。
 

@@ -8,9 +8,9 @@ publish: **how much API usage your subscription actually gives you.**
 The official page shows one bar — *Monthly usage limit, 70% remaining*. 70% of what? The
 denominator is never named anywhere. This reads it off the API.
 
-![](docs/panel-light.jpg)
+![](docs/panel.jpg)
 
-<sub>Dark theme: <a href="docs/panel-dark.jpg">docs/panel-dark.jpg</a></sub>
+<sub>Follows the browser's light or dark theme.</sub>
 
 For anyone on Plus, Pro, Business or Team who uses Codex enough to wonder what the
 subscription is really worth.
@@ -163,13 +163,13 @@ Every request carries `workspace_user=true`, so the figures cover the current se
 
 ## Install
 
-The repository is private, so a one-click raw link will not resolve. By hand:
-
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
-2. New script in the dashboard, paste in
-   [`how-much-i-get-from-codex.user.js`](how-much-i-get-from-codex.user.js)
+2. Click **[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)** — Tampermonkey picks it up
 3. Open <https://chatgpt.com/codex/cloud/settings/analytics> and click the label in the
    top-right corner
+
+Updates follow `@updateURL` back to this repository, so a push here reaches anyone who
+installed it.
 
 Interface language follows the browser and can be switched in the panel.
 

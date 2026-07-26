@@ -307,12 +307,12 @@ const USAGE = {
 // #twosubs: one login holding both a personal Plus and a workspace seat, which is when the
 // panel has to say which of the two it is reporting.
 const SECOND_ACCOUNT = MODE === "twosubs"
-  ? { "800cd026": { account: { account_id: "800cd026", structure: "personal" },
+  ? { "acct-personal": { account: { account_id: "acct-personal", structure: "personal" },
       entitlement: { has_active_subscription: true, subscription_plan: "chatgptplusplan",
         renews_at: new Date(NOW + 21 * DAY).toISOString(), cancels_at: null, billing_period: "monthly" } } }
   : {};
 
-const CHECK = { accounts: { ...SECOND_ACCOUNT, "4456f2d2": { account: { account_id: "4456f2d2", structure: "workspace" }, entitlement: {
+const CHECK = { accounts: { ...SECOND_ACCOUNT, "acct-workspace": { account: { account_id: "acct-workspace", structure: "workspace" }, entitlement: {
   subscription_id: "test", has_active_subscription: true, subscription_plan: "chatgptteamplan",
   expires_at: RENEWS_AT, renews_at: RENEWS_AT, cancels_at: null,
   billing_period: "monthly", billing_currency: "GBP",
