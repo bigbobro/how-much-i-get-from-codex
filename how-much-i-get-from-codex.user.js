@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.5.1
+// @version      2.6.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -84,6 +84,11 @@
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
   const COST_KEY = "hmig-monthly-cost";
+  // Closed usage windows, bucketed per login identity × subscription seat.
+  const MEMORY_KEY = "hmig-cycle-memory";
+  const MEMORY_KEEP = 8;
+  // startAt can jitter by a few seconds across fetches; treat nearby stamps as one window.
+  const WINDOW_MATCH_MS = 5 * 60 * 1000;
 
   // ── Copy ────────────────────────────────────────────────────────────────
 
@@ -92,10 +97,10 @@
       brand: "How much I get",
       title: "How Much I Get",
       from: "from Codex",
-      window: (plan, days) => `${plan} · ${days}-day cycle`,
-      windowHours: (plan, hours) => `${plan} · ${hours}-hour cycle`,
+      window: (plan, days) => `${plan} · ${days}-day usage window`,
+      windowHours: (plan, hours) => `${plan} · ${hours}-hour usage window`,
 
-      cycle: "This cycle",
+      cycle: "This usage window",
       period: "This subscription",
       calendarMonth: "This month",
 
@@ -120,14 +125,14 @@
       resetInPost: "days",
       perDaySuffix: "/day",
       runOut: (d) => `On this pace you run out ${d}, before the reset`,
-      endAt: (a) => `On this pace the cycle ends around ${a}`,
+      endAt: (a) => `On this pace this usage window ends around ${a}`,
 
       untilRenewal: "Left before renewal",
       renewalOn: (d) => `renews ${d}`,
       renewalMath: (a, n, l, partial) =>
-        `${a} left in this cycle, then ${n} more allowance${n > 1 ? "s" : ""} of about ${l}` +
+        `${a} left in this usage window, then ${n} more allowance${n > 1 ? "s" : ""} of about ${l}` +
         (partial ? " — a window hands over the whole amount even with days left to spend it" : ""),
-      renewalOneCycle: (a) => `${a} left — the subscription renews before this cycle does`,
+      renewalOneCycle: (a) => `${a} left — the subscription renews before this usage window does`,
 
       plusBank: (n, a) => `${n} reset card${n === 1 ? "" : "s"} unspent, worth ${a} more if you use them.`,
       bankEmpty: "No reset cards left, so nothing can be opened ahead of schedule.",
@@ -158,17 +163,23 @@
       today: "today",
       partialDay: "today is still filling — this bar will grow",
 
-      onPaceInline: (a, p, d) => `at the pace of the cycle that ended ${d} you would use ${a} of it (${p})`,
+      onPaceInline: (a, p, d) => `at the pace of the usage window that ended ${d} you would use ${a} of it (${p})`,
 
-      cycles: "Cycle by cycle",
-      cyclesSub: "boundaries ahead are firm; earlier ones drift if a reset moved them",
+      cycles: "Usage window by window",
+      cyclesSub: "remembered rows are local; inferred rows assume a fixed window length and can drift after an early reset",
       thWhen: "Window",
       thSpend: "Spend",
-      cyclePast: "earlier",
       cycleNow: "now",
-      cycleNext: "ahead",
-      cycleCutShort: "renewal lands mid-window",
-      cycleHidden: (n) => `and ${n} more opening${n > 1 ? "s" : ""} before renewal, not listed`,
+      cycleRemembered: "remembered",
+      cycleInferred: "inferred",
+      cycleSuspect: "spend looks like more than one allowance",
+      cycleCeilingChanged: (from, to) => `Allowance changed since the last remembered window: ${from} → ${to}`,
+      cycleMemLocal:
+        "Usage-window history for this subscription is stored only in this browser. It is not uploaded. Clearing site data or switching browsers drops it.",
+      cycleMemClear: "Clear local history for this subscription",
+      cycleMemClearConfirm:
+        "Clear the remembered usage windows for this subscription on this browser? This cannot be undone.",
+      cycleMemEmpty: "No local history yet — each finished usage window is saved here when a new one opens.",
       gaugeAria: (a, b) => `spent ${a} of an inferred ${b} ceiling`,
 
       payback: "Payback",
@@ -221,12 +232,12 @@
       thShare: "Share",
       thLoc: "Lines",
 
-      emptyCycle: "Nothing spent this cycle yet.",
+      emptyCycle: "Nothing spent in this usage window yet.",
       emptyPeriod: "Nothing spent this period yet.",
       emptyHint: "Try the other view.",
       loading: "Reading usage data…",
       noToken: "Could not get an access token. Sign in to ChatGPT and reload the page.",
-      noWindow: "The API returned no rate limit window, so the cycle range is unknown.",
+      noWindow: "The API returned no rate limit window, so the usage-window range is unknown.",
 
       notesTitle: "What is measured and what is inferred",
       n1: "Cost comes from per-model token counts × the official rate card. Checked against OpenAI's own model-share numbers: matches to 4-5 significant figures. Treat it as exact.",
@@ -250,10 +261,10 @@
       brand: "我到底拿到多少",
       title: "我到底拿到多少",
       from: "Codex 额度",
-      window: (plan, days) => `${plan} · ${days} 天周期`,
-      windowHours: (plan, hours) => `${plan} · ${hours} 小时周期`,
+      window: (plan, days) => `${plan} · ${days} 天用量窗口`,
+      windowHours: (plan, hours) => `${plan} · ${hours} 小时用量窗口`,
 
-      cycle: "本周期",
+      cycle: "本份用量",
       period: "本期订阅",
       calendarMonth: "本自然月",
 
@@ -262,11 +273,10 @@
       measured: "实测",
       inferred: "推算",
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
-      twoSubscriptions: (n, plan) => `This login holds ${n} active subscriptions. Every figure here is for the ${plan} one — the subscription the Codex API answers for, which does not have to be the account named in the profile menu.`,
       twoSubscriptions: (n, plan) => `这个登录下有 ${n} 份有效订阅。这里的数字都属于 ${plan} 这一份，也就是 Codex 接口当前回答的那份。它跟档案菜单显示的账号常常不是同一个。`,
       measuredFrom: (n) => `由 ${n} 天用量测出`,
       usedAllowances: (n) => `这段时间用掉 ${n} 份额度`,
-      overspent: (n) => `本周期已经用掉 ${n} 份额度，说明中途重置过。下面的「未用」是指当前这一份还剩多少。`,
+      overspent: (n) => `这份用量窗口已经用掉 ${n} 份额度，说明中途重置过。下面的「未用」是指当前这一份还剩多少。`,
       allowanceChanged: (n) => `另外 ${n} 天推出来的额度跟今天不一样，说明这段时间里换过套餐。只采用与今天一致的那些天。`,
       topRateWarning: "有些天既没有按模型的拆分，接口也没给 credits，只能按最贵的模型计价，这些天会偏高。",
       placeholderWindow: "这个套餐不走限流窗口：已用百分比一直是 0%，重置时间跟着当前时间往前滑。边界不是真的，所以周期视图和据此数出来的份数都已隐藏。额度和花费照常。",
@@ -279,14 +289,14 @@
       resetInPost: "天重置",
       perDaySuffix: " 日均",
       runOut: (d) => `按这个速度，${d} 就用完了，赶不到重置`,
-      endAt: (a) => `按这个速度，周期结束时约花掉 ${a}`,
+      endAt: (a) => `按这个速度，这份用量窗口结束时约花掉 ${a}`,
 
       untilRenewal: "续费前还能拿",
       renewalOn: (d) => `${d} 续费`,
       renewalMath: (a, n, l, partial) =>
-        `本周期还剩 ${a}，之后还会开出 ${n} 份额度，每份约 ${l}` +
+        `本份用量还剩 ${a}，之后还会开出 ${n} 份额度，每份约 ${l}` +
         (partial ? " —— 窗口一开就是满额发放，哪怕只剩几天用" : ""),
-      renewalOneCycle: (a) => `本周期还剩 ${a} —— 订阅比周期先续`,
+      renewalOneCycle: (a) => `本份用量还剩 ${a} —— 订阅比重置先到`,
 
       plusBank: (n, a) => `另外还有 ${n} 张重置券没用，用掉相当于再多 ${a}。`,
       bankEmpty: "重置券用完了，没法再提前开新额度。",
@@ -317,17 +327,22 @@
       today: "今天",
       partialDay: "今天还没走完，这一天的数还在涨",
 
-      onPaceInline: (a, p, d) => `按 ${d} 结束那个周期的用法，你实际会用掉其中 ${a}（${p}）`,
+      onPaceInline: (a, p, d) => `按 ${d} 结束那份用量窗口的用法，你实际会用掉其中 ${a}（${p}）`,
 
-      cycles: "一个周期一个周期看",
-      cyclesSub: "往后的边界是硬的；往回推的可能因为中途重置而偏移",
+      cycles: "一份额度一份看",
+      cyclesSub: "「本地记录」存在本机；「推算」按固定窗口长度往回切，中途 reset 后可能偏",
       thWhen: "窗口",
       thSpend: "花费",
-      cyclePast: "过去",
       cycleNow: "现在",
-      cycleNext: "往后",
-      cycleCutShort: "续费日落在这个窗口中间",
-      cycleHidden: (n) => `续费前还会再开 ${n} 次，没有逐条列出`,
+      cycleRemembered: "本地记录",
+      cycleInferred: "推算",
+      cycleSuspect: "花费像不止一份额度",
+      cycleCeilingChanged: (from, to) => `相对上一份本地记录，额度变了：${from} → ${to}`,
+      cycleMemLocal:
+        "这份订阅的用量窗口历史只保存在你这台浏览器本地，不会上传。清除网站数据或换浏览器后会丢失。",
+      cycleMemClear: "清除本订阅的本地记录",
+      cycleMemClearConfirm: "清除本浏览器里这份订阅的用量窗口记录？清除后无法恢复。",
+      cycleMemEmpty: "还没有本地记录 —— 等新的用量窗口打开时，会把刚结束的那一份记在这里。",
       gaugeAria: (a, b) => `已花 ${a}，推算额度 ${b}`,
 
       payback: "回本",
@@ -380,12 +395,12 @@
       thShare: "占比",
       thLoc: "代码行",
 
-      emptyCycle: "本周期还没花钱。",
+      emptyCycle: "这份用量窗口还没花钱。",
       emptyPeriod: "这一期订阅还没花钱。",
       emptyHint: "换另一个视图看看。",
       loading: "正在读用量数据…",
       noToken: "拿不到访问令牌。登录 ChatGPT 后刷新页面再试。",
-      noWindow: "接口没返回限流窗口，确定不了本周期的范围。",
+      noWindow: "接口没返回限流窗口，确定不了用量窗口的范围。",
 
       notesTitle: "哪些是实测，哪些是推算",
       n1: "花费 = 每天每模型的 token 数 × 官方 rate card。跟 OpenAI 自己返回的模型占比对过，吻合到 4~5 位有效数字，可以当精确值用。",
@@ -565,6 +580,9 @@
       renewsAt: Date.parse(pick.entitlement.renews_at),
       billingPeriod: pick.entitlement.billing_period,
       liveSubscriptions: distinct.size,
+      accountId: pick.account?.account_id || "",
+      structure: pick.account?.structure || "",
+      subscriptionPlan: pick.entitlement?.subscription_plan || "",
     };
   }
 
@@ -921,9 +939,136 @@
     error: "",
     open: false,
     root: null,
+    // Per-subscription usage-window memory (localStorage); null until identity is known.
+    memory: null,
+    memoryId: "",
   };
 
-  const monthlyCost = () => Number(localStorage.getItem(COST_KEY)) || 0;
+  /*
+   * One browser can hold several logins and several seats. Memory and monthly cost are
+   * bucketed by the seat Codex is actually answering for — never a single global pile.
+   */
+  function identityKey() {
+    const email = (state.win?.email || "").trim().toLowerCase() || "unknown";
+    const accountId = (state.ent?.accountId || "").trim() || state.ent?.structure || "unknown";
+    const plan = (state.win?.planType || "unknown").toLowerCase();
+    return `${email}|${accountId}|${plan}`;
+  }
+
+  function costKeyForIdentity() {
+    return state.win ? `${COST_KEY}::${identityKey()}` : COST_KEY;
+  }
+
+  function monthlyCost() {
+    if (state.win) {
+      const scoped = localStorage.getItem(costKeyForIdentity());
+      if (scoped != null && scoped !== "") return Number(scoped) || 0;
+    }
+    // Pre-2.6.0 single global value — still read so existing entries keep working.
+    return Number(localStorage.getItem(COST_KEY)) || 0;
+  }
+
+  function setMonthlyCost(value) {
+    const n = Number(value) || 0;
+    if (state.win) localStorage.setItem(costKeyForIdentity(), String(n));
+    else localStorage.setItem(COST_KEY, String(n));
+  }
+
+  function readMemoryStore() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MEMORY_KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeMemoryStore(store) {
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(store));
+  }
+
+  function emptyMemoryBucket() {
+    return { closed: [], open: null };
+  }
+
+  function loadMemoryBucket() {
+    if (!state.win) {
+      state.memory = null;
+      state.memoryId = "";
+      return null;
+    }
+    const id = identityKey();
+    const store = readMemoryStore();
+    const bucket = store[id] && typeof store[id] === "object" ? store[id] : emptyMemoryBucket();
+    if (!Array.isArray(bucket.closed)) bucket.closed = [];
+    state.memoryId = id;
+    state.memory = bucket;
+    return { store, id, bucket };
+  }
+
+  function sameWindowStart(a, b) {
+    return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < WINDOW_MATCH_MS;
+  }
+
+  /*
+   * Snapshot the current usage window, and when startAt moves, freeze the previous one.
+   * That freeze is the only reliable past boundary we get — the API does not hand history.
+   */
+  function syncCycleMemory() {
+    if (!state.win || state.win.placeholder || !state.win.inferable) {
+      loadMemoryBucket();
+      return;
+    }
+    const r = cycleReading();
+    if (!r) {
+      loadMemoryBucket();
+      return;
+    }
+
+    const loaded = loadMemoryBucket();
+    if (!loaded) return;
+    const { store, id, bucket } = loaded;
+    const startAt = state.win.startAt;
+    const resetAt = state.win.resetAt;
+    const ceiling = r.ceiling > 0 ? r.ceiling : null;
+    const spend = r.s.credits;
+
+    if (bucket.open && !sameWindowStart(bucket.open.startAt, startAt)) {
+      bucket.closed.push({
+        startAt: bucket.open.startAt,
+        resetAt: bucket.open.resetAt,
+        ceiling: bucket.open.ceiling > 0 ? bucket.open.ceiling : null,
+        spend: Number(bucket.open.spend) || 0,
+        closedAt: Date.now(),
+      });
+      if (bucket.closed.length > MEMORY_KEEP) bucket.closed = bucket.closed.slice(-MEMORY_KEEP);
+      bucket.open = null;
+    }
+
+    if (!bucket.open || !sameWindowStart(bucket.open.startAt, startAt)) {
+      bucket.open = { startAt, resetAt, ceiling, spend, updatedAt: Date.now() };
+    } else {
+      bucket.open.resetAt = resetAt;
+      bucket.open.spend = spend;
+      if (ceiling != null) bucket.open.ceiling = ceiling;
+      bucket.open.updatedAt = Date.now();
+    }
+
+    store[id] = bucket;
+    writeMemoryStore(store);
+    state.memory = bucket;
+    state.memoryId = id;
+  }
+
+  function clearCurrentMemory() {
+    if (!state.win) return;
+    const id = identityKey();
+    const store = readMemoryStore();
+    delete store[id];
+    writeMemoryStore(store);
+    state.memory = emptyMemoryBucket();
+    state.memoryId = id;
+  }
 
   let wasOpen = false;
 
@@ -1261,7 +1406,16 @@
     const bank = state.win.resetBank || 0;
     const openings = seg.openings + bank;
     const usableTime = Math.max(0, state.ent.renewsAt - state.win.resetAt) / W;
-    const basis = seg.lastFull ? seg.lastFull.spend : Math.min(r.ceiling, perMs * W);
+    // Prefer a locally remembered closed window — its boundaries were observed, not guessed.
+    const lastMem = state.memory?.closed?.length
+      ? state.memory.closed[state.memory.closed.length - 1]
+      : null;
+    const basis = lastMem?.spend > 0
+      ? lastMem.spend
+      : seg.lastFull
+        ? seg.lastFull.spend
+        : Math.min(r.ceiling, perMs * W);
+    const basisEnd = lastMem?.resetAt || (seg.lastFull ? seg.lastFull.end : null);
 
     return {
       renewsAt: state.ent.renewsAt,
@@ -1275,7 +1429,8 @@
       allowance: leftThisCycle + openings * r.ceiling,
       expected: restOfThisCycle + usableTime * basis,
       basis,
-      basisIsLastFull: !!seg.lastFull,
+      basisIsLastFull: !!(lastMem?.spend > 0 || seg.lastFull),
+      basisEnd,
     };
   }
 
@@ -1421,6 +1576,15 @@
     .cost-line { align-items: center; gap: 4px 6px; }
     .cost-line .cost-input { width: 64px; padding: 2px 6px; font-size: 12px; }
     .cost-currency { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+    .mem-foot { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; }
+    .mem-note { margin: 0; font-size: 11px; color: var(--ink-3); max-width: 52ch; line-height: 1.45; }
+    .mem-clear {
+      font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      border: 1px solid var(--rule); background: var(--panel); color: var(--ink-2);
+    }
+    .mem-clear:hover { color: var(--alarm); border-color: var(--alarm); }
+    .mem-clear:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
 
     /* hairlines drawn per cell, not by letting a grid gap show through: a partly filled
        last row would otherwise leave a slab of rule colour in the empty tracks */
@@ -1580,41 +1744,13 @@
 
   function forecastHtml() {
     const L = t();
-    const proj = projectToRenewal();
-    if (!proj) return "";
+    if (!state.win) return "";
 
+    const proj = projectToRenewal();
     const cost = monthlyCost();
     const p = periodRange();
     const periodSpend = summarize(state.days.filter((d) => d.date >= p.from)).credits;
     const periodProjection = projectPeriodSpend();
-
-    /*
-     * The expected figure used to sit beside the allowance as a second big number, but the
-     * two are usually within a few percent of each other and the reader was left doing the
-     * subtraction. Stated as a share of the allowance it says the thing directly.
-     */
-    /*
-     * You cannot use more than you were granted, so the expectation is capped at the
-     * allowance — a past cycle can out-spend the inferred ceiling (the shared pool makes the
-     * ceiling read low), and an uncapped figure would print "$700 of it — 100.0%" under a
-     * $650 headline.
-     */
-    const expected = proj.ceiling == null ? 0 : Math.min(proj.expected, proj.allowance);
-    const onPace =
-      proj.ceiling != null && proj.basisIsLastFull && proj.allowance > 0
-        ? `<div class="readout"><span>${esc(
-            L.onPaceInline(usd(expected), pct(expected / proj.allowance), shortDate(dayKey(proj.seg.lastFull.end))),
-          )}</span></div>`
-        : "";
-
-    const allowance =
-      proj.ceiling == null
-        ? `<div class="amount small" style="color:var(--ink-3)">—</div>
-           <div class="readout"><span>${esc(L.renewalUnknown)}</span></div>`
-        : `<div class="amount small is-inferred">${usd(proj.allowance)}</div>
-           <div class="readout"><span>${esc(L.renewalOn(dateOnly(proj.renewsAt)))}</span></div>
-           <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>
-           ${onPace}`;
 
     // Cost stays editable after the first save: a wrong figure locked in place is worse
     // than a small input sitting next to the payback line.
@@ -1636,52 +1772,106 @@
         : `<div class="readout" style="margin:2px 0 6px"><span>${esc(L.setCost)}</span></div>
            ${costField(0)}`;
 
-    return `
+    let forecastBlock = "";
+    if (proj) {
+      /*
+       * You cannot use more than you were granted, so the expectation is capped at the
+       * allowance — a past cycle can out-spend the inferred ceiling (the shared pool makes the
+       * ceiling read low), and an uncapped figure would print "$700 of it — 100.0%" under a
+       * $650 headline.
+       */
+      const expected = proj.ceiling == null ? 0 : Math.min(proj.expected, proj.allowance);
+      const paceEnd = proj.basisEnd || proj.seg?.lastFull?.end;
+      const onPace =
+        proj.ceiling != null && proj.basisIsLastFull && proj.allowance > 0 && paceEnd
+          ? `<div class="readout"><span>${esc(
+              L.onPaceInline(usd(expected), pct(expected / proj.allowance), shortDate(dayKey(paceEnd))),
+            )}</span></div>`
+          : "";
+
+      const allowance =
+        proj.ceiling == null
+          ? `<div class="amount small" style="color:var(--ink-3)">—</div>
+             <div class="readout"><span>${esc(L.renewalUnknown)}</span></div>`
+          : `<div class="amount small is-inferred">${usd(proj.allowance)}</div>
+             <div class="readout"><span>${esc(L.renewalOn(dateOnly(proj.renewsAt)))}</span></div>
+             <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>
+             ${onPace}`;
+
+      forecastBlock = `
       <div class="forecast">
         <div style="flex:2 1 320px"><div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.untilRenewal)}</div>${allowance}</div>
         <div><div class="eyebrow">${esc(L.payback)}</div>${payback}</div>
-      </div>
-      ${cycleStripHtml(proj)}
-    `;
+      </div>`;
+    } else {
+      forecastBlock = `
+      <div class="forecast">
+        <div><div class="eyebrow">${esc(L.payback)}</div>${payback}</div>
+      </div>`;
+    }
+
+    return `${forecastBlock}${cycleStripHtml(proj)}`;
   }
 
   function cycleStripHtml(proj) {
     const L = t();
-    const seg = proj.seg;
-    if (!seg || (!seg.past.length && !seg.future.length)) return "";
+    const r = cycleReading();
+    if (!state.win || !r || state.win.placeholder || !state.win.inferable) return "";
 
     const span = (a, b) => `${shortDate(dayKey(a))} → ${shortDate(dayKey(b))}`;
     const rows = [];
+    const closed = state.memory?.closed || [];
+    const ceiling = r.ceiling;
 
-    // A segment whose days were never fetched has nothing to say; a row of dashes only
-    // invites it to be read as "no usage".
-    for (const p of seg.past) {
-      if (!p.covered) continue;
-      rows.push([span(p.start, p.end), L.cyclePast, p.spend > 0 ? usd(p.spend) : "—", "past"]);
+    // Remembered closed windows first — observed start/reset, not arithmetic lookback.
+    for (const c of closed) {
+      const suspect = ceiling && c.spend > ceiling * 1.15;
+      const note = suspect ? `${L.cycleRemembered} · ${L.cycleSuspect}` : L.cycleRemembered;
+      const spend = c.spend > 0 ? usd(c.spend) : "—";
+      const amount = c.ceiling
+        ? `${spend} <span class="inf">/ ${usd(c.ceiling)}</span>`
+        : spend;
+      rows.push([span(c.startAt, c.resetAt), note, amount, "past"]);
     }
 
-    // Only this row and the projected ones carry markup, and every value in them comes from
-    // usd(). Nothing API-derived may be routed through the amount column without escaping it.
+    // Fixed-length lookback only fills gaps memory does not cover. Early resets make these drift.
+    const seg = proj?.seg;
+    if (seg) {
+      for (const p of seg.past) {
+        if (!p.covered || !(p.spend > 0)) continue;
+        if (closed.some((c) => sameWindowStart(c.startAt, p.start))) continue;
+        const suspect = ceiling && p.spend > ceiling * 1.15;
+        const note = suspect ? `${L.cycleInferred} · ${L.cycleSuspect}` : L.cycleInferred;
+        rows.push([span(p.start, p.end), note, `<span class="inf">${usd(p.spend)}</span>`, "past"]);
+      }
+    }
+
     rows.push([
-      span(seg.current.start, seg.current.end),
+      span(state.win.startAt, state.win.resetAt),
       L.cycleNow,
-      seg.current.ceiling
-        ? `${usd(seg.current.spend)} <span class="inf">/ ${usd(seg.current.ceiling)}</span>`
-        : usd(seg.current.spend),
+      ceiling
+        ? `${usd(r.s.credits)} <span class="inf">/ ${usd(ceiling)}</span>`
+        : usd(r.s.credits),
       "now",
     ]);
 
-    // Every opening grants the whole ceiling, including the one the billing period cuts
-    // short — so the strip shows full grants and marks where the period ends, rather than
-    // pro-rating and contradicting the headline above it.
-    for (const f of seg.future) {
-      rows.push([
-        span(f.start, f.end),
-        f.endsEarly ? `${L.cycleNext} · ${L.cycleCutShort}` : L.cycleNext,
-        proj.ceiling ? usd(proj.ceiling) : "—",
-        "ahead",
-      ]);
+    // Future openings stay out of this table — they mix billing forecast into usage history.
+    // "Left before renewal" above already states what still opens before the next payment.
+
+    let changeLine = "";
+    if (closed.length && ceiling) {
+      const prevCeil = closed[closed.length - 1].ceiling;
+      if (prevCeil > 0 && Math.abs(prevCeil - ceiling) / prevCeil > 0.02) {
+        changeLine = `<div class="readout" style="margin-top:8px"><span>${esc(
+          L.cycleCeilingChanged(usd(prevCeil), usd(ceiling)),
+        )}</span></div>`;
+      }
     }
+
+    const hasClosed = closed.length > 0;
+    const clearBtn = hasClosed
+      ? `<button type="button" class="mem-clear" data-act="clear-mem">${esc(L.cycleMemClear)}</button>`
+      : "";
 
     return `
       <div style="margin-top:20px">
@@ -1693,12 +1883,17 @@
               ([when, what, amount, kind]) => `<tr class="cyc-${kind}">
                 <td>${esc(when)}</td>
                 <td class="cyc-note">${esc(what)}</td>
-                <td class="n strong">${kind === "ahead" ? `<span class="inf">${amount}</span>` : amount}</td>
+                <td class="n strong">${amount}</td>
               </tr>`,
             )
             .join("")}</tbody>
         </table></div>
-        ${seg.hiddenOpenings ? `<div class="readout" style="margin-top:6px"><span>${esc(L.cycleHidden(seg.hiddenOpenings))}</span></div>` : ""}
+        ${changeLine}
+        ${hasClosed ? "" : `<div class="readout" style="margin-top:8px"><span>${esc(L.cycleMemEmpty)}</span></div>`}
+        <div class="mem-foot">
+          <p class="mem-note">${esc(L.cycleMemLocal)}</p>
+          ${clearBtn}
+        </div>
       </div>
     `;
   }
@@ -2192,7 +2387,15 @@
     const cost = root.querySelector(".cost-input");
     if (cost)
       cost.onchange = () => {
-        localStorage.setItem(COST_KEY, String(Number(cost.value) || 0));
+        setMonthlyCost(cost.value);
+        render();
+      };
+
+    const clearMem = root.querySelector('[data-act="clear-mem"]');
+    if (clearMem)
+      clearMem.onclick = () => {
+        if (!window.confirm(t().cycleMemClearConfirm)) return;
+        clearCurrentMemory();
         render();
       };
 
@@ -2264,6 +2467,7 @@
       state.unpricedFast = data.unpricedFast;
       state.fetchedFrom = data.fetchedFrom;
       state.loaded = true;
+      syncCycleMemory();
 
       // A freshly reset cycle is empty — land on the period rather than an empty panel.
       const cycleFrom = dayKey(state.win.startAt);
