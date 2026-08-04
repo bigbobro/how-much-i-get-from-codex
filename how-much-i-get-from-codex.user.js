@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.5.0
+// @version      2.5.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -172,7 +172,8 @@
       gaugeAria: (a, b) => `spent ${a} of an inferred ${b} ceiling`,
 
       payback: "Payback",
-      paybackOn: (paid, got) => `paid ${paid}, used ${got}`,
+      paybackPaidLead: "paid",
+      paybackUsedTail: (got) => `, used ${got}`,
       setCost: "What do you pay a month?",
       costPlaceholder: "e.g. 30",
 
@@ -330,7 +331,8 @@
       gaugeAria: (a, b) => `已花 ${a}，推算额度 ${b}`,
 
       payback: "回本",
-      paybackOn: (paid, got) => `付了 ${paid}，用掉 ${got}`,
+      paybackPaidLead: "付了",
+      paybackUsedTail: (got) => `，用掉 ${got}`,
       setCost: "你一个月付多少？",
       costPlaceholder: "比如 30",
 
@@ -1416,6 +1418,9 @@
       background: var(--panel); color: var(--ink);
     }
     .cost-input:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
+    .cost-line { align-items: center; gap: 4px 6px; }
+    .cost-line .cost-input { width: 64px; padding: 2px 6px; font-size: 12px; }
+    .cost-currency { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 
     /* hairlines drawn per cell, not by letting a grid gap show through: a partly filled
        last row would otherwise leave a slab of rule colour in the empty tracks */
@@ -1611,15 +1616,25 @@
            <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>
            ${onPace}`;
 
+    // Cost stays editable after the first save: a wrong figure locked in place is worse
+    // than a small input sitting next to the payback line.
+    const costField = (value) =>
+      `<input class="cost-input" type="number" min="0" step="1" inputmode="decimal"
+              ${value > 0 ? `value="${value}"` : ""}
+              placeholder="${esc(L.costPlaceholder)}" aria-label="${esc(L.setCost)}">`;
+
     const payback =
       cost > 0
         ? `<div class="amount small">${((periodSpend * USD_PER_CREDIT) / cost).toFixed(1)}×</div>
-           <div class="readout"><span>${esc(L.paybackOn("$" + cost, usd(periodSpend)))}</span></div>
+           <div class="readout cost-line">
+             <span>${esc(L.paybackPaidLead)}</span>
+             <span class="cost-currency">$</span>${costField(cost)}
+             <span>${esc(L.paybackUsedTail(usd(periodSpend)))}</span>
+           </div>
            ${periodProjection ? `<div class="readout"><span class="inf">${esc(L.projPayback(((periodProjection.projected * USD_PER_CREDIT) / cost).toFixed(1)))}</span></div>` : ""}
            <div class="readout"><span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span></div>`
         : `<div class="readout" style="margin:2px 0 6px"><span>${esc(L.setCost)}</span></div>
-           <input class="cost-input" type="number" min="0" step="1" inputmode="decimal"
-                  placeholder="${esc(L.costPlaceholder)}" aria-label="${esc(L.setCost)}">`;
+           ${costField(0)}`;
 
     return `
       <div class="forecast">
