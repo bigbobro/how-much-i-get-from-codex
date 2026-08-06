@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.8.2
+// @version      2.9.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -26,13 +26,15 @@
  *   /wham/usage/daily-…-breakdown     → per-model token counts, but no money
  *
  * Put them together:
- *   per-model tokens × official rate card = credits spent   exact
- *   credits ÷ used percent               = the ceiling      inferred
+ *   credits the API reports (or tokens × rate card) = spend        exact
+ *   spend ÷ used percent                            = the ceiling  inferred
  *
- * The credits step is exact rather than an approximation: the per-model shares this
- * script computes match the ones OpenAI returns from its own endpoint to 4-5 significant
- * figures. Everything downstream of the division is an estimate, and the interface says
- * so — solid blue is measured, dashed amber is inferred.
+ * Reported credits win wherever they exist — they are what OpenAI actually charged. The
+ * rate card prices the days without them, and that path is exact rather than an
+ * approximation: the per-model shares this script computes match the ones OpenAI returns
+ * from its own endpoint to 4-5 significant figures. Everything downstream of the division
+ * is an estimate, and the interface says so — solid blue is measured, dashed amber is
+ * inferred.
  *
  * Nothing is requested until you open the panel. No background polling.
  */
@@ -139,16 +141,13 @@
       creditsUnlimited: "purchased credits are marked unlimited on this account",
       resetCardsUsed: (n, a) => `${n} reset card${n === 1 ? "" : "s"} used this billing period, about ${a} of extra allowance`,
       resetCardsAvail: (n, a) => `${n} reset card${n === 1 ? "" : "s"} left, about ${a}`,
-      projCeilingRoom: (cap, n) => `${n} more allowance${n === 1 ? "" : "s"} open before renewal, so the period cannot exceed ${cap} however fast you go.`,
-      periodWindows: (n, l) => `${n} usage windows of about ${l} at today's size (do not multiply older spend by this)`,
-      periodResets: (n) => `the usage window rolled about ${n} time${n > 1 ? "s" : ""} inside the billing period`,
+      narrWindows: (n, resets, one) => `About ${n} usage windows this period: one already open when it began, then ${resets} more roll${resets === 1 ? "" : "s"} — a floor, since early resets only add. Each estimated at today's ${one}; past windows may have been larger, so do not multiply older spend by it.`,
       periodNoReset: "one usage window — it did not roll inside the billing period",
-      periodFloor: "window count is a floor; early resets or spent reset cards only add",
       periodCardSpent: "spent this billing period",
       periodCardOne: "one allowance now",
       periodCardOneSub: "this usage window only — not the whole period average",
-      periodCardLeft: "still obtainable",
-      periodCardLeftSub: "at today's allowance size, before renewal",
+      periodCardLeft: "still obtainable before renewal",
+      periodCardLeftSub: "at today's allowance size — a ceiling on grants, not a spend forecast",
       remainingStack: "What you can still draw before renewal",
       remainingStackSub: "future layers use today's one-allowance size",
       remWindow: "left in this usage window",
@@ -159,8 +158,10 @@
       timelineAhead: "ahead (est.)",
       timelineRemembered: "saved",
       timelineInferred: "past window",
+      timelineSpill: "spans period start · in-period part only",
       winTableTitle: "Window by window",
       winTableSub: "each row is a usage window's measured spend — not calendar months",
+      winTableTotal: "listed windows total",
       thWinKind: "Kind",
       thWinCeil: "This window size",
       chartComposite: "Spend by usage window",
@@ -169,13 +170,14 @@
       chartBarNow: "this window",
       chartLineSpend: "cumulative $",
       renewalUnknown: "Needs a ceiling before it can project",
-      projBasis: (rate, days, end, left) => `${days} calendar days in at ${rate}/day, run to ${end} — ${left} days left`,
-      projFloor: (m) => `${m} of that is already spent, and that part is measured`,
+      narrCap: (cap, spent, left) => `The period tops out at ${cap}: ${spent} already spent (measured) plus ${left} still to open (inferred).`,
+      narrPaceCapped: (days, rate, end, paced) => `${days} days in at ${rate}/day — pace alone would reach ${paced} by ${end}, but the allowance tops out first, so pace does not decide.`,
+      narrPaceUnder: (days, rate, end, paced) => `${days} days in at ${rate}/day runs to about ${paced} by ${end}, short of the cap.`,
+      narrPacePlain: (days, rate, end, paced) => `${days} days in at ${rate}/day runs to about ${paced} by ${end}.`,
       projEarly: "Less than a fifth of the period has gone; this is a coarse extrapolation",
       projNoWindow: "What the period costs depends on how many allowances open before renewal, and this plan does not report its window boundaries, so it cannot be worked out. The spend and the allowance count below are measured.",
       projNotYet: "Not enough completed days to extrapolate the period",
       projPayback: (x) => `${x}× projected for the period`,
-      projCapToday: (paced, n, one) => `Pace alone would reach ${paced}; cap uses today's ~${one} × ${n} more window${n === 1 ? "" : "s"} (plus what's left now). Past windows may have been larger.`,
       chartDaily: "Spend per day",
       chartDailySub: (r) => `dashed line is ${r} per calendar day`,
       chartModel: "Where the money goes by model",
@@ -258,7 +260,8 @@
       noWindow: "The API returned no rate limit window, so the usage-window range is unknown.",
 
       notesTitle: "What is measured and what is inferred",
-      n1: "Cost comes from per-model token counts × the official rate card. Checked against OpenAI's own model-share numbers: matches to 4-5 significant figures. Treat it as exact.",
+      n1: "Cost is the credits OpenAI itself reports, wherever the API returns them. Days without reported credits are priced from per-model token counts × the official rate card — that path matches OpenAI's own model-share numbers to 4-5 significant figures. The cached/uncached/output split always follows the rate card's shape, scaled to the reported total.",
+      nTurnSplit: "When a model ran both standard and fast, its turns are split between the two rows by credit share — so a row's turns can be fractional, and per-turn figures use the unrounded split.",
       n2: (r) => `Credits convert at 1 credit = $${r} (1000 credits = $40). OpenAI has never published this rate — change USD_PER_CREDIT at the top of the script if yours differs.`,
       n3: "The ceiling is inferred: spend ÷ the used percentage the API reports. The more you have used, the tighter it gets.",
       n4: (t, d, a) => `The cycle opened at ${t}, but usage only arrives in whole UTC days. The ${d} row counts that entire day — ${a} — and some of it was spent before the cycle opened. How much cannot be known, but it pushes both the spend and the ceiling high.`,
@@ -321,16 +324,13 @@
       creditsUnlimited: "这个账号的已购 credit 标记为不限量",
       resetCardsUsed: (n, a) => `本账期已用掉 ${n} 张重置券，约等于多开 ${a} 额度`,
       resetCardsAvail: (n, a) => `重置券还剩 ${n} 张，约 ${a}`,
-      projCeilingRoom: (cap, n) => `续费前还会开 ${n} 份额度，所以不管你跑多快，整期都不会超过 ${cap}。`,
-      periodWindows: (n, l) => `按今天的一份大小估：约 ${n} 个用量窗口 × ${l}（不要用它去乘历史花费）`,
-      periodResets: (n) => `账期内用量窗口大约滚了 ${n} 次`,
+      narrWindows: (n, resets, one) => `这一期共约 ${n} 份额度：期初已开着 1 份，之后再滚 ${resets} 次；次数是下限，提前 reset 只会更多。每份按今天的 ${one} 估 —— 过去的窗可能更大，别拿它去乘历史花费。`,
       periodNoReset: "一个用量窗口 —— 账期内没有再滚",
-      periodFloor: "窗口次数是下限；提前 reset 或用掉重置券只会更多",
       periodCardSpent: "本期已花",
       periodCardOne: "当前一份",
       periodCardOneSub: "只描述本份用量窗口，不是整期平均",
-      periodCardLeft: "按当前额度还能拿",
-      periodCardLeftSub: "用今天的一份大小估到续费前",
+      periodCardLeft: "续费前还能拿",
+      periodCardLeftSub: "按今天的一份大小估 —— 是能拿的上限，不是会花的预测",
       remainingStack: "续费前还能动用的",
       remainingStackSub: "后面几层按「当前一份」大小估算",
       remWindow: "本份用量窗口剩余",
@@ -341,8 +341,10 @@
       timelineAhead: "往后（估）",
       timelineRemembered: "本地记录",
       timelineInferred: "已过窗口",
+      timelineSpill: "跨期 · 只计账期内",
       winTableTitle: "一窗口一窗口比",
       winTableSub: "每一行是该用量窗口里测到的花费，不是自然月",
+      winTableTotal: "已列窗口合计",
       thWinKind: "类型",
       thWinCeil: "该窗额度",
       chartComposite: "按用量窗口看花费",
@@ -351,13 +353,14 @@
       chartBarNow: "当前窗口",
       chartLineSpend: "累计 $",
       renewalUnknown: "要先推算出额度才能往后推",
-      projBasis: (rate, days, end, left) => `按已过 ${days} 天、日均 ${rate} 推到 ${end}，还剩 ${left} 天`,
-      projFloor: (m) => `其中 ${m} 已经花掉了，这部分是实测的`,
+      narrCap: (cap, spent, left) => `整期最多到 ${cap}：已花掉的 ${spent} 是实测，续费前还能开出的 ${left} 是推算。`,
+      narrPaceCapped: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 的节奏，到 ${end} 本会冲到 ${paced} —— 但额度先到顶，节奏说了不算。`,
+      narrPaceUnder: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 的节奏，到 ${end} 约 ${paced}，够不着封顶。`,
+      narrPacePlain: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 推到 ${end}，约 ${paced}。`,
       projEarly: "账期才过了不到两成，这个外推还很粗",
       projNoWindow: "整期花多少，取决于续费前会开出几份额度；而这个套餐不报窗口边界，所以算不出来。下面的花费和份数都是实测的。",
       projNotYet: "已完成的天数还不够外推整期",
       projPayback: (x) => `整期预计 ${x}×`,
-      projCapToday: (paced, n, one) => `按节奏会到 ${paced}；封顶按今天每份约 ${one}、续费前再开 ${n} 次（外加当前剩余）。过去的窗可能更大。`,
       chartDaily: "每天花了多少",
       chartDailySub: (r) => `虚线是自然日日均 ${r}`,
       chartModel: "钱花在哪个模型上",
@@ -439,7 +442,8 @@
       noWindow: "接口没返回限流窗口，确定不了用量窗口的范围。",
 
       notesTitle: "哪些是实测，哪些是推算",
-      n1: "花费 = 每天每模型的 token 数 × 官方 rate card。跟 OpenAI 自己返回的模型占比对过，吻合到 4~5 位有效数字，可以当精确值用。",
+      n1: "花费优先取 OpenAI 自己返回的 credits 记账值；接口没给 credits 的天，才按每模型 token 数 × 官方 rate card 估 —— 这条路径跟 OpenAI 返回的模型占比对过，吻合到 4~5 位有效数字。缓存 / 未缓存 / 输出的拆分始终按 rate card 的结构、对齐到记账总额。",
+      nTurnSplit: "同一个模型同时跑了标准和 fast 时，turns 按两行的花费份额拆开 —— 所以单行的 turns 可能是小数，「每 turn」用拆分前的精确值算。",
       n2: (r) => `credits 换美元按 1 credit = $${r}（1000 credits = $40）。这个汇率 OpenAI 从没公布过 —— 你那边不一样就改脚本顶部的 USD_PER_CREDIT。`,
       n3: "额度是推算的：花费 ÷ 接口给的已用百分比。用得越多，推得越准。",
       n4: (t, d, a) => `周期是 ${t} 开始的，但用量只能按整个 UTC 天取。${d} 这一行算的是一整天（${a}），其中一部分花在周期开始之前。具体多少无从得知，但它会把花费和推算额度一起抬高。`,
@@ -470,7 +474,10 @@
   const int = (v) => Math.round(v).toLocaleString("en-US");
   // Turns are split across a model's speed rows by token share, so a row can hold a
   // fraction of one. Rounding that to "0" beside a real per-turn price reads as a bug.
-  const turnCount = (v) => (v > 0 && v < 0.5 ? "<1" : int(v));
+  // Model turns are split between speed rows by credit share, so they can be fractional.
+  // Rounding them away would leave spend ÷ turns unable to reproduce the per-turn column.
+  const turnCount = (v) =>
+    v > 0 && v < 0.5 ? "<1" : Math.abs(v - Math.round(v)) >= 0.05 ? v.toFixed(1) : int(v);
   const pct = (x) => (x * 100).toFixed(1) + "%";
 
   const tokenCount = (v) => {
@@ -1828,6 +1835,7 @@
     tr.cyc-now td { background: color-mix(in srgb, var(--measured) 8%, transparent); }
     tr.cyc-now td:first-child { box-shadow: inset 2px 0 0 var(--measured); }
     tr.cyc-ahead td { color: var(--ink-2); }
+    tr.cyc-total td { border-top: 1px solid var(--ink-3); border-bottom: 0; }
     @media (prefers-color-scheme: dark) {
       tr.cyc-now td { background: color-mix(in srgb, var(--measured) 16%, transparent); }
     }
@@ -2160,20 +2168,50 @@
     };
 
     for (const c of state.memory?.closed || []) {
+      // A remembered window that spans the period start carries last period's spend in its
+      // stored total. Inside this table everything is framed by the period, so clip it to
+      // the in-period days — same treatment as the inferred spill row below.
+      const spansStart = c.startAt < p.startMs && c.resetAt > p.startMs;
       push({
-        start: c.startAt,
+        start: spansStart ? p.startMs : c.startAt,
+        origStart: c.startAt,
         end: c.resetAt,
-        spend: c.spend,
+        spend: spansStart
+          ? spendInDays(dayKey(p.startMs), addDays(dayKey(c.resetAt), -1))
+          : c.spend,
         ceiling: c.ceiling,
-        kind: "remembered",
+        kind: spansStart ? "spill" : "remembered",
       });
     }
 
     const seg = cycleSegments();
     if (seg) {
       for (const past of seg.past) {
-        if (!past.covered) continue;
-        if (rows.some((x) => sameWindowStart(x.start, past.start))) continue;
+        // Dedupe on the window's true opening time: a clipped row's start was moved to the
+        // period boundary, so matching on start alone would let the same window in twice.
+        if (rows.some((x) => sameWindowStart(x.origStart ?? x.start, past.start))) continue;
+        if (!past.covered) {
+          /*
+           * A window that opened before the fetch range can still own the billing period's
+           * opening days — and those days were fetched, because the fetch always reaches back
+           * to the period start. Show that stretch as a row truncated to the period instead of
+           * dropping the segment: dropped, the table stops adding up to the headline spend (by
+           * 18% of the period, on the account this was found on).
+           */
+          const inPeriodFrom = dayKey(Math.max(past.start, p.startMs));
+          if (!state.fetchedFrom || inPeriodFrom < state.fetchedFrom) continue;
+          const spend = spendInDays(inPeriodFrom, addDays(dayKey(past.end), -1));
+          if (spend > 0)
+            push({
+              start: Math.max(past.start, p.startMs),
+              origStart: past.start,
+              end: past.end,
+              spend,
+              ceiling: null,
+              kind: "spill",
+            });
+          continue;
+        }
         push({
           start: past.start,
           end: past.end,
@@ -2310,7 +2348,9 @@
           ? L.timelineAhead
           : k === "remembered"
             ? L.timelineRemembered
-            : L.timelineInferred;
+            : k === "spill"
+              ? L.timelineSpill
+              : L.timelineInferred;
 
     const body = show
       .map((r) => {
@@ -2341,6 +2381,18 @@
       })
       .join("");
 
+    // Measured rows only — the reader's calculator check against the headline spend.
+    const listedTotal = show.reduce((a, r) => a + (r.kind !== "ahead" && r.spend > 0 ? r.spend : 0), 0);
+    const totalRow =
+      listedTotal > 0
+        ? `<tr class="cyc-total">
+            <td></td>
+            <td class="cyc-note">${esc(L.winTableTotal)}</td>
+            <td class="n strong">${esc(usd(listedTotal))}</td>
+            <td class="n">—</td>
+          </tr>`
+        : "";
+
     return `
       <div class="section">
         <div class="section-head">
@@ -2351,7 +2403,7 @@
             <th>${esc(L.thWhen)}</th><th>${esc(L.thWinKind)}</th>
             <th class="n">${esc(L.thSpend)}</th><th class="n">${esc(L.thWinCeil)}</th>
           </tr></thead>
-          <tbody>${body}</tbody>
+          <tbody>${body}${totalRow}</tbody>
         </table></div>
       </div>`;
   }
@@ -2384,15 +2436,16 @@
     const periodDays = Math.max(1, Math.round((t1 - t0) / DAY_MS));
     const todayKey = dayKey(Date.now());
     let running = 0;
-    const linePts = [];
+    // The zero start is its own point at the period's first instant — not the first day
+    // drawn empty. Folding the two together drops the opening day's spend from the whole
+    // line, and the line stops meeting the headline total.
+    const linePts = [[xAt(t0), 0]];
     for (let i = 0; i <= periodDays; i++) {
       const key = addDays(dayKey(t0), i);
       if (key > todayKey) break;
-      if (i > 0) running += byDate.get(key) || 0;
-      const ms = dayMs(key) + (i === 0 ? 0 : DAY_MS * 0.5);
-      linePts.push([xAt(ms), running]);
+      running += byDate.get(key) || 0;
+      linePts.push([xAt(dayMs(key) + DAY_MS * 0.5), running]);
     }
-    if (!linePts.length) linePts.push([xAt(Date.now()), 0]);
     if (linePts.length === 1) linePts.push([xAt(Date.now()), running]);
 
     const measuredSpend = running;
@@ -2415,7 +2468,7 @@
         const isNow = r.kind === "now";
         const fill = isNow ? "var(--measured)" : "var(--measured-soft)";
         const tip = [
-          isNow ? L.timelineNow : L.timelineInferred,
+          isNow ? L.timelineNow : r.kind === "spill" ? L.timelineSpill : L.timelineInferred,
           `${shortDate(dayKey(r.start))} → ${shortDate(dayKey(r.end))}`,
           usd(value),
         ].join(" · ");
@@ -2566,26 +2619,34 @@
     const leftTotal = parts.total;
 
     /*
-     * Spend is the measured track. Today's one-allowance size only prices what is still open
-     * or clearly labeled future estimates — never rewritten over historical window dollars.
+     * One narrative, one sentence per idea: what the period tops out at and what that is
+     * made of, whether pace or allowance decides it, and where the window count comes
+     * from. narrCap must quote the cap itself — projected can sit below it, and then
+     * "spent + still to open" would no longer add up to the number in the sentence.
+     * Today's one-allowance size only prices the future, never historical window dollars.
      */
-    const capNote =
-      projection && projection.capBinds && ceiling
-        ? L.projCapToday(usd(projection.paced), projection.openings ?? 0, usd(ceiling))
-        : projection && projection.cap != null
-          ? L.projCeilingRoom(usd(projection.cap), projection.openings)
-          : "";
-
+    const endKey = projection ? shortDate(dayKey(p.fullEndMs)) : "";
     const footnotes = [
-      projection
-        ? L.projBasis(usd(projection.rate), projection.basisDays, shortDate(dayKey(p.fullEndMs)), projection.remainingDays)
+      projection && projection.cap != null
+        ? L.narrCap(
+            usd(projection.cap),
+            usd(projection.measured),
+            usd(Math.max(0, projection.cap - projection.measured)),
+          )
         : null,
-      projection ? L.projFloor(usd(projection.measured)) : null,
-      capNote || null,
+      projection
+        ? projection.cap == null
+          ? L.narrPacePlain(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
+          : projection.capBinds
+            ? L.narrPaceCapped(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
+            : L.narrPaceUnder(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
+        : null,
       projection?.early ? L.projEarly : null,
-      grant && ceiling ? L.periodWindows(grant.windows, usd(ceiling)) : null,
-      grant && ceiling ? (grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset) : null,
-      grant && ceiling ? L.periodFloor : null,
+      grant && ceiling
+        ? grant.resets > 0
+          ? L.narrWindows(grant.windows, grant.resets, usd(ceiling))
+          : L.periodNoReset
+        : null,
       cards.n > 0 ? L.resetCardsUsed(cards.n, usd(cards.credits)) : null,
     ].filter(Boolean);
 
@@ -2597,12 +2658,12 @@
           ? periodCompositeChartHtml(winInfo, projection)
           : `<div class="section readout"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
       }
-      ${periodWindowTableHtml(winInfo)}
       ${
         footnotes.length
           ? `<div class="section"><div class="readout">${footnotes.map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>`
           : ""
       }
+      ${periodWindowTableHtml(winInfo)}
       <div class="readout meta">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
         <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
@@ -2721,6 +2782,9 @@
           ? [[L.n11, true]]
           : [[L.n3, false]]),
       ...(overlap ? [[L.n4(clock(win.startAt), first.date, usd(first.credits)), true]] : []),
+      ...(days.some((d) => d.models.some((m) => m.speed && m.speed !== "standard"))
+        ? [[L.nTurnSplit, false]]
+        : []),
       [L.n5, false],
       [L.n6, false],
       [L.n8, false],

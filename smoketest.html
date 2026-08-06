@@ -22,6 +22,11 @@ the real script would never have fetched.</p>
   <li><a href="#personal">#personal</a> — a Plus-style account: the workspace breakdown 400s,
       credits come from the counts endpoint, and the allowance is measured from the daily
       percentages. Expect an allowance of <b>$199.59</b>.</li>
+  <li><a href="#spill">#spill</a> — the billing period opens inside a window two rolls back, and
+      the opening day carries real spend ($89.82) that no fully-fetched segment owns. The window
+      table must show it as a truncated "spans period start" row, the listed-windows total and
+      the cumulative line must both equal the headline <b>$209.57</b>, and the five listed rows
+      must match the five-allowance count in the narrative.</li>
   <li><a href="#unknownmodel">#unknownmodel</a> — a metered day whose only model is missing
       from the rate card. Must fall back to the reported credits, never show NaN.</li>
   <li><a href="#changed">#changed</a> — the allowance doubles partway through the range.
@@ -209,12 +214,30 @@ if (MODE === "multi") {
 } else if (MODE === "personal") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
-  USED_PERCENT = 31;
+  // Consistent with the credits/percent fixtures (1372.2 of 4989.7 credits), so the live
+  // window reading agrees with the daily ratios instead of overriding them since v2.6.1.
+  USED_PERCENT = 27.5;
   RENEWS_AT = new Date(NOW + 22 * DAY).toISOString();
   DAYS = [
     { at: NOON - 5 * DAY, k: 0.40, turns: 22, threads: 4 },
     { at: NOON - 3 * DAY, k: 0.90, turns: 41, threads: 6 },
     { at: NOON - 1 * DAY, k: 0.55, turns: 27, threads: 5 },
+  ];
+} else if (MODE === "spill") {
+  // The billing period starts inside the window two rolls before the current one. That
+  // window can never be fetched whole, but its in-period days were fetched — the spend on
+  // them must surface as a truncated row, not vanish from the table, the bars and the line.
+  // used% deliberately sits below the live-window override threshold so the ceiling comes
+  // from the daily ratios, matching the credits/percent fixtures.
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 15;
+  RENEWS_AT = new Date(NOW + 11 * DAY).toISOString();
+  DAYS = [
+    { at: NOON - 18 * DAY, k: 0.90, turns: 30, threads: 5 },  // period opening day, unfetchable window
+    { at: NOON - 12 * DAY, k: 0.50, turns: 18, threads: 4 },  // two windows back
+    { at: NOON -  5 * DAY, k: 0.40, turns: 15, threads: 3 },  // prior window
+    { at: NOON -  1 * DAY, k: 0.30, turns: 12, threads: 2 },  // current window
   ];
 } else if (MODE === "noent") {
   WINDOW_SEC = 7 * 86400;
@@ -248,7 +271,7 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = MODE === "personal" || MODE === "unknownmodel" || MODE === "bank" || MODE === "changed";
+const METERED = MODE === "personal" || MODE === "spill" || MODE === "unknownmodel" || MODE === "bank" || MODE === "changed";
 const DAY_CREDITS = METERED
   ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * (d.big ? 2 : 1) * d.k * 0.5 * 10) / 10]))
   : {};
@@ -288,8 +311,10 @@ const ATTRIBUTION = { group: "workspace", group_by: "day",
 const RESET_BANK = MODE === "bank" ? 2 : 0;
 
 const USAGE = {
-  plan_type: MODE === "personal" || MODE === "bank" || MODE === "changed" ? "plus" : "team",
-  email: "someone@example.com",
+  plan_type: MODE === "personal" || MODE === "spill" || MODE === "bank" || MODE === "changed" ? "plus" : "team",
+  // Per-scenario identity: cycle memory is bucketed by email|account|plan, and a shared
+  // address would let one scenario's remembered windows leak into the next one's tables.
+  email: `someone+${MODE}@example.com`,
   rate_limit: {
     allowed: true, limit_reached: false,
     primary_window: {
@@ -341,7 +366,7 @@ window.fetch = (url) => {
   window.__calls.push(u.split("?")[0]);
   if (u.includes("daily-workspace-user-token-usage-breakdown")) {
     // Personal plans have no workspace; this endpoint answers 400 and everything must still work.
-    if (MODE === "personal") return Promise.resolve(new Response('{"detail":"No active workspace found for the current account."}', { status: 400 }));
+    if (MODE === "personal" || MODE === "spill") return Promise.resolve(new Response('{"detail":"No active workspace found for the current account."}', { status: 400 }));
     return reply(clip(BREAKDOWN, u));
   }
   if (u.includes("daily-workspace-usage-counts")) return reply(clip(COUNTS, u));
@@ -353,6 +378,7 @@ window.fetch = (url) => {
     if (MODE === "noent") return Promise.resolve(new Response("nope", { status: 403 }));
     return reply(CHECK);
   }
+  if (u.includes("rate-limit-reset-credits")) return reply({ available_count: RESET_BANK, credits: [] });
   if (u.includes("/wham/usage")) return reply(USAGE);
   return Promise.reject(new Error("no stub for " + u));
 };

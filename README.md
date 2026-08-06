@@ -190,6 +190,7 @@ python3 -m http.server 8731
 |---|---|
 | *(default)* | rate card + window division. **Must read $249.83 spent / $250.00 ceiling** |
 | `#personal` | Plus-style: the workspace breakdown 400s, allowance measured at **$199.59** |
+| `#spill` | billing period opens inside an unfetchable window — its in-period spend must show as a truncated row, and the table total must equal the headline **$209.57** |
 | `#multi` | 7-day window, a completed cycle, multi-opening forecast |
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
 | `#changed` | allowance doubles mid-range; the reading follows today and says what it dropped |
