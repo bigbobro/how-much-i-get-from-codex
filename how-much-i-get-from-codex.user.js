@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.6.1
+// @version      2.7.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -136,6 +136,11 @@
 
       plusBank: (n, a) => `${n} reset card${n === 1 ? "" : "s"} unspent, worth ${a} more if you use them.`,
       bankEmpty: "No reset cards left, so nothing can be opened ahead of schedule.",
+      plusCredits: (a) => `purchased credit balance ${a} still available after the plan pool`,
+      creditsBalance: (a) => `credit balance ${a}`,
+      creditsUnlimited: "purchased credits are marked unlimited on this account",
+      resetCardsUsed: (n, a) => `${n} reset card${n === 1 ? "" : "s"} used this billing period, about ${a} of extra allowance`,
+      resetCardsAvail: (n, a) => `${n} reset card${n === 1 ? "" : "s"} left, about ${a}`,
       projCapped: (paced, n, one) => `The pace alone would reach ${paced}, but only ${n} more allowance${n === 1 ? "" : "s"} of about ${one} open before renewal. The cap is per window, so going faster does not get you more.`,
       projCeilingRoom: (cap, n) => `${n} more allowance${n === 1 ? "" : "s"} open before renewal, so the period cannot exceed ${cap} however fast you go.`,
       periodGranted: "Allowance this payment bought",
@@ -143,7 +148,7 @@
       periodWindows: (n, l) => `${n} allowances of about ${l}`,
       periodResets: (n) => `the window reset ${n} time${n > 1 ? "s" : ""} inside the billing period`,
       periodNoReset: "one allowance — the window did not reset inside the billing period",
-      periodFloor: "a floor — an extra reset only adds",
+      periodFloor: "a floor — an early reset or a spent reset card only adds",
       renewalUnknown: "Needs a ceiling before it can project",
       projTitle: "Projected for the period",
       projTitleMonth: "Projected for the month",
@@ -300,6 +305,11 @@
 
       plusBank: (n, a) => `另外还有 ${n} 张重置券没用，用掉相当于再多 ${a}。`,
       bankEmpty: "重置券用完了，没法再提前开新额度。",
+      plusCredits: (a) => `账户里还有已购 credit 余额 ${a}，套餐池用完后仍可花`,
+      creditsBalance: (a) => `credit 余额 ${a}`,
+      creditsUnlimited: "这个账号的已购 credit 标记为不限量",
+      resetCardsUsed: (n, a) => `本账期已用掉 ${n} 张重置券，约等于多开 ${a} 额度`,
+      resetCardsAvail: (n, a) => `重置券还剩 ${n} 张，约 ${a}`,
       projCapped: (paced, n, one) => `光按节奏推会到 ${paced}，但续费前只会再开 ${n} 份额度，每份约 ${one}。额度按窗口封顶，跑得再快也拿不到更多。`,
       projCeilingRoom: (cap, n) => `续费前还会开 ${n} 份额度，所以不管你跑多快，整期都不会超过 ${cap}。`,
       periodGranted: "这笔订阅费买到的额度",
@@ -307,7 +317,7 @@
       periodWindows: (n, l) => `${n} 份额度，每份约 ${l}`,
       periodResets: (n) => `账期内额度重置了 ${n} 次`,
       periodNoReset: "一份额度 —— 账期内窗口没有重置过",
-      periodFloor: "这是下限，多一次重置只会更多",
+      periodFloor: "这是下限；提前 reset 或用掉重置券只会更多",
       renewalUnknown: "要先推算出额度才能往后推",
       projTitle: "整期预计用掉",
       projTitleMonth: "本月预计用掉",
@@ -522,7 +532,10 @@
      * schedule. The other is a reset card, spent by hand to open a fresh allowance early —
      * the reason a week can hold far more than one. The bank says exactly how many are left.
      */
-    const bank = Number(usage?.rate_limit_reset_credits?.available_count) || 0;
+    const bank =
+      Number(usage?.rate_limit_reset_credits?.available_count) ||
+      Number(usage?.rate_limit_reset_credits?.applicable_available_count) ||
+      0;
 
     const windowSec = Number(w.limit_window_seconds);
     const resetAt = Number(w.reset_at) * 1000;
@@ -547,6 +560,64 @@
       resetBank: bank,
       planType: usage.plan_type,
       email: usage.email || "",
+    };
+  }
+
+  /*
+   * Purchased credit balance sits beside the plan pool. When the included allowance is
+   * exhausted, spend can continue against this balance — so "what is left" is incomplete
+   * without it. 1 credit = USD_PER_CREDIT, same as the rate-card conversion.
+   */
+  function readPurchasedCredits(usage) {
+    const c = usage?.credits;
+    if (!c) return { balance: 0, hasCredits: false, unlimited: false };
+    if (c.unlimited) return { balance: 0, hasCredits: true, unlimited: true };
+    const balance = Number(c.balance);
+    const n = Number.isFinite(balance) && balance > 0 ? balance : 0;
+    return {
+      balance: n,
+      hasCredits: !!c.has_credits || n > 0,
+      unlimited: false,
+    };
+  }
+
+  /*
+   * Reset cards: each spent card opens one full allowance early inside the billing period.
+   * usage only reports how many are still available; the detail endpoint lists status and
+   * timestamps so we can also count cards used inside the current payment window.
+   */
+  function parseResetCredits(detail, fallbackAvailable, rangeStartMs, rangeEndMs) {
+    const availableFromUsage = Math.max(0, Number(fallbackAvailable) || 0);
+    const rows = Array.isArray(detail?.credits)
+      ? detail.credits
+      : Array.isArray(detail?.data)
+        ? detail.data
+        : [];
+
+    let available = Number(detail?.available_count ?? detail?.applicable_available_count);
+    if (!Number.isFinite(available)) available = availableFromUsage;
+
+    const start = Number.isFinite(rangeStartMs) ? rangeStartMs : 0;
+    const end = Number.isFinite(rangeEndMs) ? rangeEndMs : Date.now();
+    let usedInPeriod = 0;
+
+    for (const row of rows) {
+      const status = String(row?.status || row?.state || "").toLowerCase();
+      const granted = Date.parse(row?.granted_at || row?.created_at || "") || 0;
+      const usedAt =
+        Date.parse(row?.used_at || row?.redeemed_at || row?.consumed_at || row?.applied_at || "") || 0;
+
+      const isUsed = /used|redeemed|spent|consumed|applied|claimed/.test(status);
+      if (!isUsed) continue;
+
+      const when = usedAt || granted;
+      if (when >= start && when <= end) usedInPeriod++;
+    }
+
+    return {
+      available: Math.max(0, available || 0),
+      usedInPeriod,
+      listed: rows.length,
     };
   }
 
@@ -728,12 +799,19 @@
         day.uncached = totals.uncached_text_input_tokens || 0;
         day.cached = totals.cached_text_input_tokens || 0;
         day.output = totals.text_output_tokens || 0;
-        day.credits = totals.credits > 0 ? totals.credits : totalsPrice.credits;
+        const included = Number(totals.credits) || 0;
+        const onDemand = Number(totals.on_demand_credits) || 0;
+        // on_demand is sometimes a subset of credits, sometimes extra. Only add when it is not
+        // already covered by the included total.
+        let reported = included;
+        if (onDemand > 0 && (!(included > 0) || onDemand > included + 0.01)) reported = included + onDemand;
+        day.credits = reported > 0 ? reported : totalsPrice.credits;
+        day.onDemandCredits = onDemand;
 
         // No per-model tokens were priced, so the day total stands in. Where it came from
         // the rate card rather than the API, sol's rates priced everything and a mini-heavy
         // day is overstated several times over — say so rather than let it pass as fact.
-        if (!(totals.credits > 0)) day.pricedAtTopRate = true;
+        if (!(reported > 0)) day.pricedAtTopRate = true;
 
         /*
          * Split the day's money across models using OpenAI's own per-model shares.
@@ -763,23 +841,29 @@
         day.uncachedCredits = totalsPrice.uncached * scale;
         day.cachedCredits = totalsPrice.cached * scale;
         day.outputCredits = totalsPrice.output * scale;
-      } else if (totals.credits > 0) {
+      } else if (totals.credits > 0 || totals.on_demand_credits > 0) {
         /*
          * Same preference when the split exists: keep the shape, correct the magnitude.
          * A day whose models are all unknown to the rate card prices at zero, and scaling by
          * a zero denominator turns every field into NaN — which then slips past a `<= 0`
          * guard, because NaN fails every comparison. Take the reported total instead.
          */
-        if (day.credits > 0) {
-          const scale = totals.credits / day.credits;
+        const included = Number(totals.credits) || 0;
+        const onDemand = Number(totals.on_demand_credits) || 0;
+        let reported = included;
+        if (onDemand > 0 && (!(included > 0) || onDemand > included + 0.01)) reported = included + onDemand;
+        day.onDemandCredits = onDemand;
+        if (day.credits > 0 && reported > 0) {
+          const scale = reported / day.credits;
           for (const k of ["credits", "uncachedCredits", "cachedCredits", "outputCredits", "fastCredits"]) day[k] *= scale;
           for (const m of models) m.credits *= scale;
-        } else {
-          day.credits = totals.credits;
+        } else if (reported > 0) {
+          day.credits = reported;
         }
       }
 
       if (!(day.credits > 0)) continue;
+      if (day.onDemandCredits == null) day.onDemandCredits = Number(totals.on_demand_credits) || 0;
       days.push(day);
     }
 
@@ -798,6 +882,7 @@
   function summarize(days) {
     const s = {
       credits: 0,
+      onDemandCredits: 0,
       uncachedCredits: 0,
       cachedCredits: 0,
       outputCredits: 0,
@@ -815,6 +900,7 @@
 
     for (const d of days) {
       s.credits += d.credits;
+      s.onDemandCredits += d.onDemandCredits || 0;
       s.uncachedCredits += d.uncachedCredits;
       s.cachedCredits += d.cachedCredits;
       s.outputCredits += d.outputCredits;
@@ -942,6 +1028,9 @@
     // Per-subscription usage-window memory (localStorage); null until identity is known.
     memory: null,
     memoryId: "",
+    // Purchased credit balance + reset-card ledger for the current seat.
+    purchased: { balance: 0, hasCredits: false, unlimited: false },
+    resetCards: { available: 0, usedInPeriod: 0, listed: 0 },
   };
 
   /*
@@ -1433,8 +1522,8 @@
      * time, not allowance. So the allowance counts openings at full value, while the
      * expectation counts the hours you actually have, at the pace of the last finished cycle.
      */
-    // Every card in the bank is one more allowance that can be opened before renewal.
-    const bank = state.win.resetBank || 0;
+    // Every unused reset card is one more allowance that can be opened before renewal.
+    const bank = state.resetCards?.available ?? state.win.resetBank ?? 0;
     const openings = seg.openings + bank;
     const usableTime = Math.max(0, state.ent.renewsAt - state.win.resetAt) / W;
     // Prefer a locally remembered closed window — its boundaries were observed, not guessed.
@@ -1448,6 +1537,10 @@
         : Math.min(r.ceiling, perMs * W);
     const basisEnd = lastMem?.resetAt || (seg.lastFull ? seg.lastFull.end : null);
 
+    // Purchased credit balance is spendable after the plan pool; add it to what is still left.
+    const creditLeft = state.purchased?.unlimited ? 0 : Math.max(0, state.purchased?.balance || 0);
+    const windowLeft = leftThisCycle + openings * r.ceiling;
+
     return {
       renewsAt: state.ent.renewsAt,
       ceiling: r.ceiling,
@@ -1457,8 +1550,9 @@
       bank,
       naturalOpenings: seg.openings,
       hasPartial: usableTime % 1 > 0.001,
-      allowance: leftThisCycle + openings * r.ceiling,
-      expected: restOfThisCycle + usableTime * basis,
+      creditLeft,
+      allowance: windowLeft + creditLeft,
+      expected: restOfThisCycle + usableTime * basis + creditLeft,
       basis,
       basisIsLastFull: !!(lastMem?.spend > 0 || seg.lastFull),
       basisEnd,
@@ -1759,6 +1853,18 @@
              the whole day's spend would be attributed to a fraction of a day. */
           win.inferable ? `<span><b>${usd(perDay)}</b>${esc(L.perDaySuffix)}</span>` : ""
         }
+        ${
+          (state.resetCards?.available || 0) > 0 && r.ceiling
+            ? `<span>${esc(L.resetCardsAvail(state.resetCards.available, usd(state.resetCards.available * r.ceiling)))}</span>`
+            : ""
+        }
+        ${
+          state.purchased?.unlimited
+            ? `<span>${esc(L.creditsUnlimited)}</span>`
+            : (state.purchased?.balance || 0) > 0
+              ? `<span>${esc(L.creditsBalance(usd(state.purchased.balance)))}</span>`
+              : ""
+        }
       </div>
     `;
   }
@@ -1767,10 +1873,21 @@
   function breakdownLine(proj) {
     const L = t();
     const left = usd(proj.leftThisCycle);
-    if (!proj.openings) return L.renewalOneCycle(left);
+    let line = !proj.openings
+      ? L.renewalOneCycle(left)
+      : L.renewalMath(left, proj.naturalOpenings, usd(proj.ceiling), proj.hasPartial);
 
-    const base = L.renewalMath(left, proj.naturalOpenings, usd(proj.ceiling), proj.hasPartial);
-    return proj.bank ? `${base} ${L.plusBank(proj.bank, usd(proj.bank * proj.ceiling))}` : base;
+    if (proj.bank > 0) line = `${line} ${L.plusBank(proj.bank, usd(proj.bank * proj.ceiling))}`;
+    if (proj.creditLeft > 0) line = `${line} ${L.plusCredits(usd(proj.creditLeft))}`;
+    else if (state.purchased?.unlimited) line = `${line} ${L.creditsUnlimited}`;
+    return line;
+  }
+
+  /** Extra allowance already opened this billing period by spending reset cards. */
+  function resetCardsUsedValue(ceiling) {
+    const n = state.resetCards?.usedInPeriod || 0;
+    if (!(n > 0) || !(ceiling > 0)) return { n: 0, credits: 0 };
+    return { n, credits: n * ceiling };
   }
 
   function forecastHtml() {
@@ -2088,7 +2205,12 @@
      * stated wrongly. The spend beside it is unaffected; it sums real credits.
      */
     const allowanceChanged = !!reading?.measured?.dropped;
-    const granted = grant && ceiling && !allowanceChanged ? grant.windows * ceiling : null;
+    const cards = resetCardsUsedValue(ceiling);
+    const bankLeft = state.resetCards?.available || 0;
+    const creditLeft = state.purchased?.unlimited ? 0 : Math.max(0, state.purchased?.balance || 0);
+    // Window openings are a floor; spent reset cards are extra full grants inside the period.
+    const granted =
+      grant && ceiling && !allowanceChanged ? grant.windows * ceiling + cards.credits : null;
     const projection = projectPeriodSpend();
     const right = projection
       ? `<div class="right">
@@ -2134,18 +2256,35 @@
       ${
         granted
           ? `<div class="readout" style="margin-top:10px">
-               <span>${esc(projection ? L.projGranted(usd(granted), grant.windows, usd(ceiling)) : L.periodWindows(grant.windows, usd(ceiling)))}</span>
+               <span>${esc(projection ? L.projGranted(usd(grant.windows * ceiling), grant.windows, usd(ceiling)) : L.periodWindows(grant.windows, usd(ceiling)))}</span>
                <span>${esc(grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset)}</span>
                <span>${esc(L.periodFloor)}</span>
              </div>`
           : ""
       }
       ${
+        cards.n > 0
+          ? `<div class="readout" style="margin-top:6px"><span>${esc(L.resetCardsUsed(cards.n, usd(cards.credits)))}</span></div>`
+          : ""
+      }
+      ${
+        bankLeft > 0 && ceiling
+          ? `<div class="readout" style="margin-top:6px"><span>${esc(L.resetCardsAvail(bankLeft, usd(bankLeft * ceiling)))}</span></div>`
+          : ""
+      }
+      ${
+        state.purchased?.unlimited
+          ? `<div class="readout" style="margin-top:6px"><span>${esc(L.creditsUnlimited)}</span></div>`
+          : creditLeft > 0
+            ? `<div class="readout" style="margin-top:6px"><span>${esc(L.creditsBalance(usd(creditLeft)))}</span></div>`
+            : ""
+      }
+      ${
         allowanceChanged && grant
           ? `<div class="readout" style="margin-top:10px"><span>${esc(L.grantedUnknown(grant.windows))}</span></div>`
           : ""
       }
-      <div class="readout" style="margin-top:${granted ? "6px" : projection ? "10px" : "14px"}">
+      <div class="readout" style="margin-top:${granted || cards.n || creditLeft || bankLeft ? "6px" : projection ? "10px" : "14px"}">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
         ${
           /* Allowances used, counted straight from the daily percentages — the one figure
@@ -2474,13 +2613,16 @@
       state.token = state.token || (await getToken());
       if (!state.token) throw new Error(t().noToken);
 
-      const [usage, check] = await Promise.all([
+      const [usage, check, resetDetail] = await Promise.all([
         api("/backend-api/wham/usage", state.token),
         soft("/backend-api/accounts/check/v4-2023-04-27", state.token),
+        // Optional: per-card status so used reset cards in this billing period can be counted.
+        soft("/backend-api/wham/rate-limit-reset-credits", state.token),
       ]);
 
       state.win = readWindow(usage);
       state.ent = check ? readEntitlement(check, state.win?.planType) : null;
+      state.purchased = readPurchasedCredits(usage);
       if (!state.win) throw new Error(t().noWindow);
 
       /*
@@ -2491,6 +2633,16 @@
       const today = dayKey(Date.now());
       const priorCycle = dayKey(state.win.startAt - state.win.windowSec * 1000);
       const from = [dayKey(state.win.startAt), periodRange().from, priorCycle].sort()[0];
+
+      const pRange = periodRange();
+      state.resetCards = parseResetCredits(
+        resetDetail,
+        state.win.resetBank,
+        pRange.startMs,
+        Math.max(pRange.endMs, Date.now()),
+      );
+      // Keep the window object in sync with the reconciled available count.
+      state.win.resetBank = state.resetCards.available;
 
       const data = await fetchAll(state.token, from, today);
       state.days = data.days;
