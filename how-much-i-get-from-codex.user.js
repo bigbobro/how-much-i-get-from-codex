@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.8.0
+// @version      2.8.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -115,7 +115,6 @@
       allowanceChanged: (n) => `${n} earlier day${n === 1 ? "" : "s"} imply a different allowance, so the plan changed in this range. Only days matching today are counted.`,
       topRateWarning: "Some days have no per-model split and no reported credits, so they are priced at the dearest model's rate. Those days read high.",
       placeholderWindow: "This plan does not run the rate limit window: used percent stays at 0 and the reset time slides along with the clock. The boundaries are not real, so the cycle view and anything counted off it are hidden. The allowance and the spending still hold.",
-      oneAllowance: "one allowance",
       allowanceNote: (n) => `How the allowance is read: each day's cost, divided by the percentage of the allowance the API says that day used. All ${n} day${n === 1 ? "" : "s"} here point at the same value.`,
       windowTooShort: "The allowance window is shorter than a day, but usage only arrives in whole days — there is nothing to divide.",
       leftSuffix: (p) => `left (${p})`,
@@ -150,27 +149,26 @@
       periodCardOneSub: "this usage window only — not the whole period average",
       periodCardLeft: "still obtainable",
       periodCardLeftSub: "at today's allowance size, before renewal",
-      periodNoMultiply:
-        "Dollars spent and “allowances used” are different tracks. Do not multiply the count by today's per-allowance figure — each full allowance may have been a different dollar size.",
-      periodAllowancesUsed: (n) => `${n} full-allowance crossings so far (size may vary)`,
       remainingStack: "What you can still draw before renewal",
-      remainingStackSub: "stacked at today's one-allowance size where a count is involved",
+      remainingStackSub: "future layers use today's one-allowance size",
       remWindow: "left in this usage window",
       remNatural: "more windows before renewal",
       remCards: "unused reset cards",
       remCredits: "purchased credit balance",
-      timelineTitle: "Usage windows in this billing period",
-      timelineSub: "bar height ≈ spend; dashed frames are future windows at today's size",
       timelineNow: "now",
-      timelineAhead: "ahead",
-      timelineRemembered: "local",
-      timelineInferred: "inferred",
+      timelineAhead: "ahead (est.)",
+      timelineRemembered: "saved",
+      timelineInferred: "past window",
       winTableTitle: "Window by window",
-      winTableSub: "compare spend across usage windows — not calendar months",
+      winTableSub: "each row is a usage window's measured spend — not calendar months",
       thWinKind: "Kind",
-      thWinCeil: "Allowance",
-      chartAllowTrack: "Allowances used (count)",
-      chartAllowTrackSub: "cumulative daily % of one allowance — a count, not dollars",
+      thWinCeil: "This window size",
+      chartComposite: "Spend by usage window",
+      chartCompositeSub: "bars = dollars in each window; line = cumulative spend this billing period",
+      chartBarPast: "window spend",
+      chartBarNow: "this window",
+      chartBarAhead: "future window (today's size)",
+      chartLineSpend: "cumulative $",
       renewalUnknown: "Needs a ceiling before it can project",
       projBasis: (rate, days, end, left) => `${days} calendar days in at ${rate}/day, run to ${end} — ${left} days left`,
       projFloor: (m) => `${m} of that is already spent, and that part is measured`,
@@ -179,8 +177,6 @@
       projNotYet: "Not enough completed days to extrapolate the period",
       projPayback: (x) => `${x}× projected for the period`,
       projCapToday: (paced, n, one) => `Pace alone would reach ${paced}; cap uses today's ~${one} × ${n} more window${n === 1 ? "" : "s"} (plus what's left now). Past windows may have been larger.`,
-      chartCum: "What this period will cost",
-      chartCumSub: "solid is spent ($), dashed is pace forward — capped at today's allowance size",
       chartDaily: "Spend per day",
       chartDailySub: (r) => `dashed line is ${r} per calendar day`,
       chartModel: "Where the money goes by model",
@@ -302,7 +298,6 @@
       allowanceChanged: (n) => `另外 ${n} 天推出来的额度跟今天不一样，说明这段时间里换过套餐。只采用与今天一致的那些天。`,
       topRateWarning: "有些天既没有按模型的拆分，接口也没给 credits，只能按最贵的模型计价，这些天会偏高。",
       placeholderWindow: "这个套餐不走限流窗口：已用百分比一直是 0%，重置时间跟着当前时间往前滑。边界不是真的，所以周期视图和据此数出来的份数都已隐藏。额度和花费照常。",
-      oneAllowance: "一份额度",
       allowanceNote: (n) => `额度这么读出来：拿每天的花费，除以接口给的「这天用掉额度的百分之几」。这里 ${n} 天的数据都指向同一个值。`,
       windowTooShort: "这个账号的额度窗口不到一天，而用量只能按整天取 —— 没有可除的东西。",
       leftSuffix: (p) => `未用（${p}）`,
@@ -337,27 +332,26 @@
       periodCardOneSub: "只描述本份用量窗口，不是整期平均",
       periodCardLeft: "按当前额度还能拿",
       periodCardLeftSub: "用今天的一份大小估到续费前",
-      periodNoMultiply:
-        "「花了多少钱」和「用掉几份额度」是两条轨。不要用「份数 × 今天的每份美元」——历史上每一份的美元大小可能不同。",
-      periodAllowancesUsed: (n) => `至今约跨过 ${n} 次满额（每次美元大小可能不同）`,
       remainingStack: "续费前还能动用的",
-      remainingStackSub: "涉及「份数」的层按今天的一份额度折算",
+      remainingStackSub: "后面几层按「当前一份」大小估算",
       remWindow: "本份用量窗口剩余",
       remNatural: "续费前还会自然开的窗口",
       remCards: "未用重置券",
       remCredits: "已购 credit 余额",
-      timelineTitle: "本账单期的用量窗口",
-      timelineSub: "条高低≈花费；虚线框是按今天一份大小画的未来窗",
       timelineNow: "现在",
-      timelineAhead: "往后",
-      timelineRemembered: "本地",
-      timelineInferred: "推算",
+      timelineAhead: "往后（估）",
+      timelineRemembered: "本地记录",
+      timelineInferred: "已过窗口",
       winTableTitle: "一窗口一窗口比",
-      winTableSub: "比的是用量窗口，不是自然月",
+      winTableSub: "每一行是该用量窗口里测到的花费，不是自然月",
       thWinKind: "类型",
-      thWinCeil: "额度",
-      chartAllowTrack: "用掉的额度份数",
-      chartAllowTrackSub: "按天累计「占一份额度的 %」——这是次数，不是美元",
+      thWinCeil: "该窗额度",
+      chartComposite: "按用量窗口看花费",
+      chartCompositeSub: "柱 = 每个窗口花了多少美元；线 = 本账期累计花费",
+      chartBarPast: "窗口花费",
+      chartBarNow: "当前窗口",
+      chartBarAhead: "未来窗口（按当前一份估）",
+      chartLineSpend: "累计 $",
       renewalUnknown: "要先推算出额度才能往后推",
       projBasis: (rate, days, end, left) => `按已过 ${days} 天、日均 ${rate} 推到 ${end}，还剩 ${left} 天`,
       projFloor: (m) => `其中 ${m} 已经花掉了，这部分是实测的`,
@@ -366,8 +360,6 @@
       projNotYet: "已完成的天数还不够外推整期",
       projPayback: (x) => `整期预计 ${x}×`,
       projCapToday: (paced, n, one) => `按节奏会到 ${paced}；封顶按今天每份约 ${one}、续费前再开 ${n} 次（外加当前剩余）。过去的窗可能更大。`,
-      chartCum: "这期订阅会花掉多少",
-      chartCumSub: "实线是已花的美元；虚线外推，并按今天的一份大小封顶",
       chartDaily: "每天花了多少",
       chartDailySub: (r) => `虚线是自然日日均 ${r}`,
       chartModel: "钱花在哪个模型上",
@@ -1722,17 +1714,17 @@
     .readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12px; color: var(--ink-2); }
     .readout b { color: var(--ink); font-weight: 600; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     .readout .alarm, .readout .alarm b { color: var(--alarm); }
-    .why { margin-top: 8px; font-size: 12px; color: var(--ink-2); max-width: 62ch; }
-    .why.warn { color: var(--inferred-text); max-width: 72ch; }
+    .why { margin-top: 8px; font-size: 12px; color: var(--ink-2); max-width: 68ch; overflow-wrap: anywhere; }
 
     .summary-cards {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px;
       background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
     }
     .summary-card { background: var(--paper); padding: 12px 14px; min-width: 0; }
-    .summary-card .amount { font-size: 26px; }
+    .summary-card .amount { font-size: 26px; overflow-wrap: anywhere; }
     .summary-card .amount.small { font-size: 22px; }
-    .summary-card .hint { font-size: 11px; color: var(--ink-2); margin-top: 4px; line-height: 1.35; }
+    .summary-card .hint { font-size: 11px; color: var(--ink-2); margin-top: 4px; line-height: 1.4; overflow-wrap: anywhere; }
+    .summary-card .eyebrow { white-space: normal; letter-spacing: .08em; line-height: 1.35; }
     @media (max-width: 720px) {
       .summary-cards { grid-template-columns: 1fr; }
     }
@@ -2274,92 +2266,13 @@
       </div>`;
   }
 
-  function periodTimelineHtml(winInfo) {
-    const L = t();
-    const { p, ceiling, rows } = winInfo;
-    if (!rows.length) return "";
-
-    const width = 640;
-    const height = 118;
-    const left = 36;
-    const right = 12;
-    const top = 22;
-    const bottom = 28;
-    const plotW = width - left - right;
-    const plotH = height - top - bottom;
-    const t0 = p.startMs;
-    const t1 = Math.max(p.fullEndMs, p.endMs, Date.now());
-    const span = Math.max(t1 - t0, DAY_MS);
-    const x = (ms) => left + ((ms - t0) / span) * plotW;
-    const maxSpend = Math.max(...rows.map((r) => r.spend || 0), ceiling || 0, 1);
-
-    const bars = rows
-      .map((r) => {
-        const x1 = x(Math.max(r.start, t0));
-        const x2 = x(Math.min(r.end, t1));
-        const w = Math.max(3, x2 - x1);
-        const spend = r.spend || 0;
-        const h =
-          r.kind === "ahead"
-            ? plotH * 0.35
-            : Math.max(4, (Math.min(spend, maxSpend * 1.2) / maxSpend) * plotH);
-        const y = top + plotH - h;
-        const fill =
-          r.kind === "now"
-            ? "var(--measured)"
-            : r.kind === "ahead"
-              ? "transparent"
-              : r.kind === "remembered"
-                ? "var(--measured-soft)"
-                : "var(--measured-soft)";
-        const stroke = r.kind === "ahead" ? "var(--inferred)" : "none";
-        const dash = r.kind === "ahead" ? "stroke-dasharray=\"4 3\"" : "";
-        const op = r.kind === "inferred" ? "opacity=\".72\"" : r.kind === "ahead" ? "opacity=\".9\"" : "";
-        const label =
-          r.kind === "now"
-            ? L.timelineNow
-            : r.kind === "ahead"
-              ? L.timelineAhead
-              : r.kind === "remembered"
-                ? L.timelineRemembered
-                : L.timelineInferred;
-        const tip = [
-          label,
-          `${shortDate(dayKey(r.start))} → ${shortDate(dayKey(r.end))}`,
-          r.spend != null ? usd(r.spend) : ceiling ? `~${usd(ceiling)}` : "—",
-        ].join(" · ");
-        return `<rect x="${x1.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
-          fill="${fill}" stroke="${stroke}" stroke-width="1.2" ${dash} ${op} rx="2"><title>${esc(tip)}</title></rect>`;
-      })
-      .join("");
-
-    const nowX = x(Math.min(Math.max(Date.now(), t0), t1));
-    const ceilY = ceiling ? top + plotH - (ceiling / maxSpend) * plotH : null;
-
-    return `
-      <div class="timeline-wrap">
-        <h2>${esc(L.timelineTitle)}<em>${esc(L.timelineSub)}</em></h2>
-        <svg class="timeline-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.timelineTitle)}">
-          <line x1="${left}" x2="${width - right}" y1="${top + plotH}" y2="${top + plotH}" stroke="var(--rule)" />
-          ${
-            ceilY != null
-              ? `<line x1="${left}" x2="${width - right}" y1="${ceilY.toFixed(1)}" y2="${ceilY.toFixed(1)}" stroke="var(--inferred)" stroke-dasharray="4 3" stroke-width="1" />
-                 <text class="axis-label" x="${width - right}" y="${(ceilY - 3).toFixed(1)}" text-anchor="end">${esc(`${L.oneAllowance} ${usd(ceiling)}`)}</text>`
-              : ""
-          }
-          ${bars}
-          <line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top - 4}" y2="${top + plotH}" stroke="var(--ink-3)" stroke-width="1" />
-          <text x="${nowX.toFixed(1)}" y="${top - 8}" text-anchor="middle">${esc(L.today)}</text>
-          <text class="axis-label" x="${left}" y="${height - 8}">${esc(shortDate(dayKey(t0)))}</text>
-          <text class="axis-label" x="${width - right}" y="${height - 8}" text-anchor="end">${esc(shortDate(dayKey(t1)))}</text>
-        </svg>
-      </div>`;
-  }
-
   function periodWindowTableHtml(winInfo) {
     const L = t();
     const { rows, ceiling } = winInfo;
-    const show = rows.filter((r) => r.kind !== "ahead" || r.spend != null || ceiling);
+    // Only rows with measured spend, or the live window, or a clearly labeled future estimate.
+    const show = rows.filter(
+      (r) => (r.spend != null && r.spend > 0) || r.kind === "now" || (r.kind === "ahead" && ceiling),
+    );
     if (!show.length) return "";
 
     const kindLabel = (k) =>
@@ -2377,17 +2290,20 @@
         const spend =
           r.kind === "ahead"
             ? ceiling
-              ? `<span class="inf">${esc(usd(ceiling))}</span>`
+              ? `<span class="inf">${esc("~" + usd(ceiling))}</span>`
               : "—"
             : r.spend > 0
               ? esc(usd(r.spend))
               : "—";
+        // Ceiling only when we actually know this window's size — never paste today's size on old rows.
         const ceil =
-          r.ceiling != null
-            ? esc(usd(r.ceiling))
-            : r.kind === "ahead" && ceiling
-              ? `<span class="inf">${esc(usd(ceiling))}</span>`
-              : "—";
+          r.kind === "now" && ceiling
+            ? esc(usd(ceiling))
+            : r.ceiling != null
+              ? esc(usd(r.ceiling))
+              : r.kind === "ahead" && ceiling
+                ? `<span class="inf">${esc("~" + usd(ceiling))}</span>`
+                : "—";
         return `<tr class="cyc-${r.kind === "ahead" ? "ahead" : r.kind === "now" ? "now" : "past"}">
           <td>${esc(when)}</td>
           <td class="cyc-note">${esc(kindLabel(r.kind))}</td>
@@ -2410,114 +2326,116 @@
       </div>`;
   }
 
-  function periodAllowanceTrackHtml(p) {
+  /*
+   * One chart: usage-window spend as bars (what each window cost in $) plus cumulative
+   * billing-period spend as a line. Future windows are light dashed bars at today's ceiling
+   * only as an estimate of room left — not a claim about past window sizes.
+   */
+  function periodCompositeChartHtml(winInfo, proj) {
     const L = t();
-    const periodDays = Math.round((p.fullEndMs - p.startMs) / DAY_MS);
-    if (!(periodDays > 0)) return "";
+    const { p, ceiling, rows } = winInfo;
+    if (!rows.length && !proj) return "";
 
-    const todayKey = dayKey(Date.now());
     const width = 640;
-    const height = 120;
-    const left = 38;
-    const right = 12;
-    const top = 14;
-    const bottom = 24;
-    const plotWidth = width - left - right;
-    const plotHeight = height - top - bottom;
+    const height = 200;
+    const left = 44;
+    const right = 14;
+    const top = 18;
+    const bottom = 36;
+    const plotW = width - left - right;
+    const plotH = height - top - bottom;
+    const t0 = p.startMs;
+    const t1 = Math.max(p.fullEndMs, p.endMs, Date.now());
+    const span = Math.max(t1 - t0, DAY_MS);
+    const xAt = (ms) => left + ((Math.min(Math.max(ms, t0), t1) - t0) / span) * plotW;
 
-    let cum = 0;
-    const points = [[0, 0]];
-    for (let i = 0; i < periodDays; i++) {
-      const key = addDays(p.from, i);
-      if (key > todayKey) break;
-      const day = state.days.find((d) => d.date === key);
-      cum += (day?.percent || 0) / 100;
-      points.push([i + 1, cum]);
-    }
-    if (points.length < 2) return "";
-
-    const maxY = Math.max(cum, 1.05);
-    const x = (day) => left + (day / periodDays) * plotWidth;
-    const y = (v) => top + plotHeight - (v / maxY) * plotHeight;
-    const poly = points.map(([d, v]) => `${x(d).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-    const last = points[points.length - 1];
-    const basisDays = last[0];
-
-    return `
-      <div class="chart" style="margin-top:14px">
-        <h2>${esc(L.chartAllowTrack)}<em>${esc(L.chartAllowTrackSub)}</em></h2>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartAllowTrack)}">
-          <line class="axis" x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}"><title>Axis</title></line>
-          <line x1="${left}" x2="${width - right}" y1="${y(1)}" y2="${y(1)}" stroke="var(--rule)" stroke-dasharray="3 3" />
-          <text x="${left}" y="${y(1) - 4}" style="font-size:9.5px;fill:var(--ink-3)">1.0</text>
-          <polyline points="${poly}" fill="none" stroke="var(--inferred)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-          <circle cx="${x(last[0])}" cy="${y(last[1])}" r="3" fill="var(--inferred)" />
-          <text x="${x(last[0])}" y="${Math.max(top + 10, y(last[1]) - 7)}" text-anchor="end">${esc(last[1].toFixed(1))}</text>
-          <line x1="${x(basisDays)}" x2="${x(basisDays)}" y1="${top}" y2="${y(0)}" stroke="var(--rule)" />
-          <text x="${left}" y="${height - 6}" style="font-size:9.5px;fill:var(--ink-3)">${esc(shortDate(p.from))}</text>
-          <text x="${width - right}" y="${height - 6}" text-anchor="end" style="font-size:9.5px;fill:var(--ink-3)">${esc(shortDate(dayKey(p.fullEndMs)))}</text>
-        </svg>
-      </div>`;
-  }
-
-  function periodCumulativeChartHtml(proj) {
-    const L = t();
-    const ceiling = cycleReading()?.ceiling;
-    const width = 640;
-    const height = 160;
-    const left = 38;
-    const right = 12;
-    const top = 14;
-    const bottom = 27;
-    const plotWidth = width - left - right;
-    const plotHeight = height - top - bottom;
-    const max = Math.max(proj.projected, proj.basisSpend, ceiling || 0, 1);
-    const x = (day) => left + (day / proj.periodDays) * plotWidth;
-    const y = (value) => top + plotHeight - (value / max) * plotHeight;
     const byDate = new Map(state.days.map((d) => [d.date, d.credits]));
-    let total = 0;
-    const measured = [[x(0), y(0)]];
-    for (let i = 0; i < proj.basisDays; i++) {
-      total += byDate.get(addDays(proj.p.from, i)) || 0;
-      measured.push([x(i + 1), y(total)]);
+    const periodDays = Math.max(1, Math.round((t1 - t0) / DAY_MS));
+    const todayKey = dayKey(Date.now());
+    let running = 0;
+    const linePts = [];
+    for (let i = 0; i <= periodDays; i++) {
+      const key = addDays(dayKey(t0), i);
+      if (key > todayKey) break;
+      if (i > 0) running += byDate.get(key) || 0;
+      const ms = dayMs(key) + (i === 0 ? 0 : DAY_MS * 0.5);
+      linePts.push([xAt(ms), running]);
     }
-    const measuredEnd = measured[measured.length - 1];
-    const projectedEnd = [x(proj.periodDays), y(proj.projected)];
-    const points = measured.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
-    const fill = `M ${measured[0][0].toFixed(1)} ${y(0).toFixed(1)} L ${points.replace(/ /g, " L ")} L ${measuredEnd[0].toFixed(1)} ${y(0).toFixed(1)} Z`;
-    const grid = [0.25, 0.5, 0.75]
-      .map((n) => `<line class="axis" x1="${left}" x2="${width - right}" y1="${y(max * n)}" y2="${y(max * n)}"><title>Grid</title></line>`)
+    if (linePts.length === 1) linePts.push([xAt(Date.now()), running]);
+
+    const measuredSpend = running;
+    const projected = proj?.projected ?? measuredSpend;
+    const maxBar = Math.max(...rows.map((r) => (r.kind === "ahead" ? ceiling || 0 : r.spend || 0)), 1);
+    const maxY = Math.max(maxBar, projected, measuredSpend, 1);
+    const y = (v) => top + plotH - (v / maxY) * plotH;
+
+    const bars = rows
+      .map((r) => {
+        const x1 = xAt(r.start);
+        const x2 = xAt(r.end);
+        const w = Math.max(6, x2 - x1 - 2);
+        const value = r.kind === "ahead" ? ceiling || 0 : r.spend || 0;
+        if (!(value > 0) && r.kind !== "ahead") return "";
+        const h = Math.max(3, (value / maxY) * plotH);
+        const yy = y(value);
+        const isAhead = r.kind === "ahead";
+        const isNow = r.kind === "now";
+        const fill = isAhead ? "transparent" : isNow ? "var(--measured)" : "var(--measured-soft)";
+        const stroke = isAhead ? "var(--inferred)" : isNow ? "var(--measured)" : "none";
+        const dash = isAhead ? 'stroke-dasharray="4 3"' : "";
+        const op = isAhead ? 'opacity=".95"' : r.kind === "inferred" ? 'opacity=".85"' : "";
+        const tip = [
+          isNow ? L.timelineNow : isAhead ? L.timelineAhead : L.timelineInferred,
+          `${shortDate(dayKey(r.start))} → ${shortDate(dayKey(r.end))}`,
+          isAhead && ceiling ? `~${usd(ceiling)}` : usd(value),
+        ].join(" · ");
+        return `<rect x="${(x1 + 1).toFixed(1)}" y="${yy.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
+          fill="${fill}" stroke="${stroke}" stroke-width="${isAhead || isNow ? 1.5 : 0}" ${dash} ${op} rx="3"><title>${esc(tip)}</title></rect>`;
+      })
       .join("");
-    const ceilingLine = ceiling
-      ? `<line x1="${left}" x2="${width - right}" y1="${y(ceiling)}" y2="${y(ceiling)}" stroke="var(--inferred)" stroke-width="1" stroke-dasharray="4 4"><title>${esc(`${L.oneAllowance} ${usd(ceiling)}`)}</title></line>
-         <text x="${width - right}" y="${y(ceiling) - 4}" text-anchor="end">${esc(`${L.oneAllowance} ${usd(ceiling)} · ${L.timelineNow}`)}</text>`
-      : "";
+
+    const poly = linePts.map(([px, v]) => `${px.toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const last = linePts[linePts.length - 1];
+    const lastV = last[1];
+    let projLine = "";
+    if (proj && projected >= lastV) {
+      const endX = xAt(t1);
+      const endY = y(projected);
+      projLine = `<line x1="${last[0].toFixed(1)}" y1="${y(lastV).toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}"
+        stroke="var(--inferred)" stroke-width="2.2" stroke-dasharray="6 5" stroke-linecap="round">
+        <title>${esc(`${L.inferred} ${usd(projected)}`)}</title></line>
+        <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="3" fill="var(--inferred)" />
+        <text x="${(endX - 4).toFixed(1)}" y="${Math.max(top + 12, endY - 8).toFixed(1)}" text-anchor="end"
+          style="font-family:var(--mono);font-size:11px;fill:var(--inferred-text)">${esc(usd(projected))}</text>`;
+    }
+
+    const nowX = xAt(Date.now());
 
     return `
-      <div class="chart">
-        <h2>${esc(L.chartCum)}<em>${esc(L.chartCumSub)}</em></h2>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartCum)}">
-          ${grid}
-          <line class="axis" x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}"><title>Axis</title></line>
-          <path d="${fill}" fill="var(--measured)" opacity=".12"><title>${esc(`${L.measured} ${usd(proj.basisSpend)}`)}</title></path>
-          <polyline points="${points}" fill="none" stroke="var(--measured)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>${esc(`${L.measured} ${usd(proj.basisSpend)}`)}</title></polyline>
-          <line x1="${measuredEnd[0]}" y1="${measuredEnd[1]}" x2="${projectedEnd[0]}" y2="${projectedEnd[1]}" stroke="var(--inferred)" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"><title>${esc(`${L.inferred} ${usd(proj.projected)}`)}</title></line>
-          ${ceilingLine}
-          <line x1="${x(proj.basisDays)}" x2="${x(proj.basisDays)}" y1="${top}" y2="${y(0)}" stroke="var(--rule)" stroke-width="1"><title>${esc(L.today)}</title></line>
-          <text x="${x(proj.basisDays) + 4}" y="${top + 10}">${esc(L.today)}</text>
-          <circle cx="${measuredEnd[0]}" cy="${measuredEnd[1]}" r="3" fill="var(--measured)"><title>${esc(usd(proj.basisSpend))}</title></circle>
-          <text x="${measuredEnd[0]}" y="${Math.max(top + 10, measuredEnd[1] - 7)}" text-anchor="end">${esc(usd(proj.basisSpend))}</text>
-          <circle cx="${projectedEnd[0]}" cy="${projectedEnd[1]}" r="3" fill="var(--inferred)"><title>${esc(usd(proj.projected))}</title></circle>
-          <text x="${projectedEnd[0]}" y="${Math.max(top + 10, projectedEnd[1] - 7)}" text-anchor="end">${esc(usd(proj.projected))}</text>
-          <text x="${left}" y="${height - 5}">${esc(shortDate(proj.p.from))}</text>
-          <text x="${width - right}" y="${height - 5}" text-anchor="end">${esc(shortDate(dayKey(proj.p.fullEndMs)))}</text>
+      <div class="chart" style="margin-top:16px">
+        <h2>${esc(L.chartComposite)}<em>${esc(L.chartCompositeSub)}</em></h2>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartComposite)}" style="width:100%;height:auto;display:block">
+          <line x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule)" />
+          ${bars}
+          <polyline points="${poly}" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".9">
+            <title>${esc(L.chartLineSpend)}</title>
+          </polyline>
+          <circle cx="${last[0].toFixed(1)}" cy="${y(lastV).toFixed(1)}" r="3.5" fill="var(--ink)" />
+          <text x="${(last[0] - 6).toFixed(1)}" y="${Math.max(top + 12, y(lastV) - 8).toFixed(1)}" text-anchor="end"
+            style="font-family:var(--mono);font-size:11px;fill:var(--ink)">${esc(usd(lastV))}</text>
+          ${projLine}
+          <line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top}" y2="${y(0)}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3" />
+          <text x="${nowX.toFixed(1)}" y="${top - 4}" text-anchor="middle" style="font-size:10px;fill:var(--ink-3)">${esc(L.today)}</text>
+          <text x="${left}" y="${height - 10}" style="font-size:10px;fill:var(--ink-3)">${esc(shortDate(dayKey(t0)))}</text>
+          <text x="${width - right}" y="${height - 10}" text-anchor="end" style="font-size:10px;fill:var(--ink-3)">${esc(shortDate(dayKey(t1)))}</text>
         </svg>
-        <div class="legend-key">
-          <span><i class="key-solid"></i>${esc(L.measured)}</span>
-          <span><i class="key-dash"></i>${esc(L.inferred)}</span>
+        <div class="legend-key" style="flex-wrap:wrap">
+          <span><i class="key-solid" style="background:var(--measured-soft)"></i>${esc(L.chartBarPast)}</span>
+          <span><i class="key-solid"></i>${esc(L.chartBarNow)}</span>
+          <span><i class="key-dash"></i>${esc(L.chartBarAhead)}</span>
+          <span style="font-family:var(--mono);font-size:10px">— ${esc(L.chartLineSpend)}</span>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
   function dailyChartHtml(days, from, to) {
@@ -2606,35 +2524,25 @@
     const parts = remainingParts(ceiling);
     const cards = resetCardsUsedValue(ceiling);
     const projection = projectPeriodSpend();
-    const usedN = reading?.measured
-      ? allowancesUsed(p.from, dayKey(Date.now())).toFixed(1)
-      : null;
     const leftTotal = parts.total;
 
     /*
-     * Never headline "N × today's ceiling" as what the payment bought — older windows can
-     * be a different dollar size. Spend is the measured track; allowance count is separate;
-     * today's size only prices what is still open.
+     * Spend is the measured track. Today's one-allowance size only prices what is still open
+     * or clearly labeled future estimates — never rewritten over historical window dollars.
      */
     const capNote =
       projection && projection.capBinds && ceiling
-        ? L.projCapToday(
-            usd(projection.paced),
-            projection.openings ?? 0,
-            usd(ceiling),
-          )
+        ? L.projCapToday(usd(projection.paced), projection.openings ?? 0, usd(ceiling))
         : projection && projection.cap != null
           ? L.projCeilingRoom(usd(projection.cap), projection.openings)
           : "";
 
     return `
       ${periodSummaryCardsHtml(s.credits, ceiling, leftTotal)}
-      <p class="why warn" style="margin-top:12px">${esc(L.periodNoMultiply)}</p>
-      ${periodTimelineHtml(winInfo)}
       ${remainingStackHtml(parts, ceiling)}
       ${
-        projection
-          ? periodCumulativeChartHtml(projection) + periodAllowanceTrackHtml(p)
+        winInfo.rows.length || projection
+          ? periodCompositeChartHtml(winInfo, projection)
           : `<div class="readout" style="margin-top:14px"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
       }
       ${
@@ -2664,7 +2572,6 @@
       ${periodWindowTableHtml(winInfo)}
       <div class="readout" style="margin-top:12px">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
-        ${usedN != null ? `<span>${esc(L.periodAllowancesUsed(usedN))}</span>` : ""}
         <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
         <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
         <span>${esc(L.turnsTotal(int(s.turns)))}</span>
