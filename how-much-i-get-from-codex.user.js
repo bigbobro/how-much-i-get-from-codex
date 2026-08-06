@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.8.1
+// @version      2.8.2
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -165,9 +165,8 @@
       thWinCeil: "This window size",
       chartComposite: "Spend by usage window",
       chartCompositeSub: "bars = dollars in each window; line = cumulative spend this billing period",
-      chartBarPast: "window spend",
+      chartBarPast: "past window spend",
       chartBarNow: "this window",
-      chartBarAhead: "future window (today's size)",
       chartLineSpend: "cumulative $",
       renewalUnknown: "Needs a ceiling before it can project",
       projBasis: (rate, days, end, left) => `${days} calendar days in at ${rate}/day, run to ${end} — ${left} days left`,
@@ -348,9 +347,8 @@
       thWinCeil: "该窗额度",
       chartComposite: "按用量窗口看花费",
       chartCompositeSub: "柱 = 每个窗口花了多少美元；线 = 本账期累计花费",
-      chartBarPast: "窗口花费",
+      chartBarPast: "已过窗口花费",
       chartBarNow: "当前窗口",
-      chartBarAhead: "未来窗口（按当前一份估）",
       chartLineSpend: "累计 $",
       renewalUnknown: "要先推算出额度才能往后推",
       projBasis: (rate, days, end, left) => `按已过 ${days} 天、日均 ${rate} 推到 ${end}，还剩 ${left} 天`,
@@ -1665,15 +1663,22 @@
     .ghost:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
 
     .panel:focus { outline: none; }
-    .sheet { padding: 20px; }
+    .sheet { padding: 22px 22px 28px; }
 
     /* three tiers of separation: conclusion, diagnosis, ledger */
+    .rule { height: 1px; background: var(--rule); margin: 22px 0; }
     .rule.major { margin: 28px 0; }
 
+    .section { margin-top: 22px; }
+    .section:first-child { margin-top: 0; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 10px; flex-wrap: wrap; }
+    .section-head h2 { margin: 0; }
+    .section-note { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; max-width: 70ch; }
+
     .gauge-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-    .eyebrow { font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); margin-bottom: 4px; }
+    .eyebrow { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); margin-bottom: 5px; }
     .eyebrow.is-inferred { color: var(--inferred); }
-    .amount { font-family: var(--mono); font-size: 38px; font-weight: 620; letter-spacing: -.04em; line-height: .95; font-variant-numeric: tabular-nums; }
+    .amount { font-family: var(--mono); font-size: 38px; font-weight: 620; letter-spacing: -.04em; line-height: 1.05; font-variant-numeric: tabular-nums; }
     .amount.small { font-size: 23px; font-weight: 560; }
     .amount.is-inferred {
       display: inline-block; color: var(--inferred);
@@ -1691,10 +1696,15 @@
     .verdict { margin: 14px 0 10px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
     .verdict.alarm { color: var(--alarm); }
 
-    .legend-key { display: flex; gap: 14px; margin-top: 7px; font-size: 10px; color: var(--ink-3); }
-    .key-solid, .key-dash { display: inline-block; width: 14px; height: 7px; margin-right: 5px; vertical-align: 0; border-radius: 1px; }
+    .legend-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 10.5px; color: var(--ink-3); align-items: center; }
+    .key-solid, .key-dash, .key-line {
+      display: inline-block; width: 14px; height: 7px; margin-right: 6px; vertical-align: 0; border-radius: 1px;
+    }
     .key-solid { background: var(--measured); }
+    .key-solid.soft { background: var(--measured-soft); }
     .key-dash { border: 1px dashed var(--inferred); background: var(--inferred-soft); }
+    .key-line { height: 0; border-top: 2px solid var(--ink); border-radius: 0; width: 16px; vertical-align: 3px; }
+    .key-line.dash { border-top-style: dashed; border-top-color: var(--inferred); }
 
     .gauge { margin: 18px 0 10px; }
     .track {
@@ -1711,53 +1721,64 @@
     .fill.hot { background: var(--alarm); }
     .ticks { display: flex; justify-content: space-between; margin-top: 5px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-    .readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12px; color: var(--ink-2); }
+    .readout { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
     .readout b { color: var(--ink); font-weight: 600; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     .readout .alarm, .readout .alarm b { color: var(--alarm); }
-    .why { margin-top: 8px; font-size: 12px; color: var(--ink-2); max-width: 68ch; overflow-wrap: anywhere; }
+    .readout.meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 11.5px; }
+    .why { margin-top: 10px; font-size: 12px; color: var(--ink-2); max-width: 68ch; line-height: 1.5; overflow-wrap: anywhere; }
 
     .summary-cards {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px;
-      background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
     }
-    .summary-card { background: var(--paper); padding: 12px 14px; min-width: 0; }
-    .summary-card .amount { font-size: 26px; overflow-wrap: anywhere; }
-    .summary-card .amount.small { font-size: 22px; }
-    .summary-card .hint { font-size: 11px; color: var(--ink-2); margin-top: 4px; line-height: 1.4; overflow-wrap: anywhere; }
-    .summary-card .eyebrow { white-space: normal; letter-spacing: .08em; line-height: 1.35; }
+    .summary-card {
+      background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
+      padding: 14px 15px 15px; min-width: 0; min-height: 100%;
+      display: flex; flex-direction: column; gap: 2px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    }
+    .summary-card.primary { border-color: color-mix(in srgb, var(--measured) 28%, var(--rule)); }
+    .summary-card.infer { border-color: color-mix(in srgb, var(--inferred) 30%, var(--rule)); }
+    .summary-card .amount { font-size: 28px; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; margin-top: 2px; }
+    .summary-card .amount.small { font-size: 24px; }
+    .summary-card .hint { font-size: 11px; color: var(--ink-2); margin-top: auto; padding-top: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+    .summary-card .eyebrow { white-space: normal; letter-spacing: .08em; line-height: 1.35; margin-bottom: 0; }
     @media (max-width: 720px) {
       .summary-cards { grid-template-columns: 1fr; }
     }
 
-    .stack-wrap { margin-top: 16px; }
+    .stack-wrap { margin-top: 0; }
     .stack-bar {
-      display: flex; height: 18px; border-radius: 4px; overflow: hidden;
-      border: 1px solid var(--rule); background: var(--panel); margin-top: 8px;
+      display: flex; height: 14px; border-radius: 999px; overflow: hidden;
+      background: var(--rule); margin-top: 4px;
     }
     .stack-seg { height: 100%; min-width: 0; }
     .stack-seg.window { background: var(--measured); }
     .stack-seg.natural { background: var(--measured-soft); }
     .stack-seg.cards { background: var(--inferred); }
-    .stack-seg.credits { background: var(--ink-2); opacity: .55; }
-    .stack-keys { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
+    .stack-seg.credits { background: var(--ink-2); opacity: .5; }
+    .stack-keys {
+      display: grid; grid-template-columns: 1fr auto; gap: 6px 16px;
+      margin-top: 12px; font-size: 12px; color: var(--ink-2); align-items: baseline;
+    }
+    .stack-keys .row { display: contents; }
+    .stack-keys .lab { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .stack-keys .val { font-family: var(--mono); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
     .stack-keys i {
-      display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px;
+      display: inline-block; width: 9px; height: 9px; border-radius: 2px; flex: none;
     }
     .stack-keys .k-window { background: var(--measured); }
     .stack-keys .k-natural { background: var(--measured-soft); }
     .stack-keys .k-cards { background: var(--inferred); }
-    .stack-keys .k-credits { background: var(--ink-2); opacity: .55; }
-    .stack-total { font-family: var(--mono); font-weight: 600; color: var(--ink); margin-left: auto; }
+    .stack-keys .k-credits { background: var(--ink-2); opacity: .5; }
+    .stack-total-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule);
+      font-size: 12px; color: var(--ink-2);
+    }
+    .stack-total-row b { font-family: var(--mono); font-size: 15px; color: var(--ink); font-weight: 620; }
 
-    .timeline-wrap { margin-top: 18px; }
-    .timeline-svg { width: 100%; height: auto; display: block; }
-    .timeline-svg text { font-family: var(--mono); font-size: 10px; fill: var(--ink-2); }
-    .timeline-svg .axis-label { fill: var(--ink-3); font-size: 9.5px; }
-
-    .rule { height: 1px; background: var(--rule); margin: 20px 0; }
-
-    .forecast { display: flex; gap: 24px; flex-wrap: wrap; }
-    .forecast > div { flex: 1 1 230px; }
+    .forecast { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 4px; }
+    .forecast > div { flex: 1 1 230px; min-width: 0; }
     .cost-input {
       font: inherit; font-family: var(--mono); font-size: 14px; width: 92px;
       padding: 4px 8px; border: 1px solid var(--rule); border-radius: 4px;
@@ -1768,49 +1789,50 @@
     .cost-line .cost-input { width: 64px; padding: 2px 6px; font-size: 12px; }
     .cost-currency { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 
-    .mem-foot { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; }
-    .mem-note { margin: 0; font-size: 11px; color: var(--ink-3); max-width: 52ch; line-height: 1.45; }
+    .mem-foot { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
+    .mem-note { margin: 0; font-size: 11px; color: var(--ink-3); max-width: 52ch; line-height: 1.5; }
     .mem-clear {
-      font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      font: inherit; font-size: 11px; padding: 5px 11px; border-radius: 5px; cursor: pointer;
       border: 1px solid var(--rule); background: var(--panel); color: var(--ink-2);
     }
-    .mem-clear:hover { color: var(--alarm); border-color: var(--alarm); }
+    .mem-clear:hover { color: var(--alarm); border-color: color-mix(in srgb, var(--alarm) 40%, var(--rule)); }
     .mem-clear:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
 
     /* hairlines drawn per cell, not by letting a grid gap show through: a partly filled
        last row would otherwise leave a slab of rule colour in the empty tracks */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-    .cell { background: var(--paper); padding: 11px 13px; box-shadow: -1px -1px 0 0 var(--rule); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+    .cell { background: var(--paper); padding: 12px 14px; box-shadow: -1px -1px 0 0 var(--rule); }
     .cell .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
-    .cell .v { font-family: var(--mono); font-size: 17px; font-weight: 600; letter-spacing: -.02em; margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .cell .s { font-size: 11px; color: var(--ink-2); margin-top: 1px; }
+    .cell .v { font-family: var(--mono); font-size: 17px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .cell .s { font-size: 11px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
 
-    h2 { font-size: 10px; letter-spacing: .15em; text-transform: uppercase; font-weight: 700; margin: 0 0 9px; color: var(--ink); }
-    h2 em { font-style: normal; font-weight: 400; letter-spacing: .02em; text-transform: none; color: var(--ink-3); margin-left: 8px; font-size: 11px; }
+    h2 { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; margin: 0 0 10px; color: var(--ink); line-height: 1.3; }
+    h2 em { font-style: normal; font-weight: 400; letter-spacing: .01em; text-transform: none; color: var(--ink-3); margin-left: 8px; font-size: 11.5px; }
 
     /* hairline separators so segments stay legible against paper in either theme */
-    .bars { display: flex; height: 26px; border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
+    .bars { display: flex; height: 26px; border-radius: 4px; overflow: hidden; border: 1px solid var(--rule); }
     .bars > div { min-width: 0; }
     .bars > div + div { box-shadow: inset 1px 0 0 var(--paper); }
     .keys { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
     .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
     .keys b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
 
-    .scroll { border: 1px solid var(--rule); border-radius: 6px; overflow: auto; max-height: 290px; }
+    .scroll { border: 1px solid var(--rule); border-radius: 8px; overflow: auto; max-height: 280px; background: var(--panel); }
     table { border-collapse: collapse; width: 100%; font-size: 12px; }
-    th { position: sticky; top: 0; background: var(--paper); text-align: left; z-index: 1; padding: 7px 11px; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--rule); }
-    td { padding: 7px 11px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+    th { position: sticky; top: 0; background: var(--panel); text-align: left; z-index: 1; padding: 8px 12px; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--rule); }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
     tr:last-child td { border-bottom: 0; }
     .n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     .n.strong { font-weight: 600; }
     .cyc-note { color: var(--ink-3); font-size: 11px; }
-    tr.cyc-now td { background: color-mix(in srgb, var(--measured) 9%, transparent); }
+    tr.cyc-now td { background: color-mix(in srgb, var(--measured) 8%, transparent); }
     tr.cyc-now td:first-child { box-shadow: inset 2px 0 0 var(--measured); }
+    tr.cyc-ahead td { color: var(--ink-2); }
     @media (prefers-color-scheme: dark) {
-      tr.cyc-now td { background: color-mix(in srgb, var(--measured) 18%, transparent); }
+      tr.cyc-now td { background: color-mix(in srgb, var(--measured) 16%, transparent); }
     }
 
-    .notes { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--rule); }
+    .notes { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
     .notes h3 { font-size: 10px; letter-spacing: .15em; text-transform: uppercase; font-weight: 700; margin: 0 0 8px; color: var(--ink-2); }
     .notes ul { margin: 0; padding: 0; list-style: none; }
     .notes li { position: relative; padding-left: 16px; margin-bottom: 6px; font-size: 11.5px; line-height: 1.6; color: var(--ink-2); }
@@ -1818,7 +1840,7 @@
     .notes li.warn { color: var(--inferred); }
     .notes li.warn::before { background: var(--inferred); }
 
-    .chart { margin-top: 20px; }
+    .chart { margin-top: 0; }
     .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
     .chart .axis { stroke: var(--rule); stroke-width: 1; }
     .chart text { font-family: var(--sans); font-size: 10px; fill: var(--ink-3); }
@@ -1834,6 +1856,8 @@
 
     @media (max-width: 620px) {
       .amount { font-size: 30px; }
+      .sheet { padding: 16px 16px 22px; }
+      .summary-card .amount { font-size: 24px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .fill, .trigger { transition: none; }
@@ -2207,7 +2231,7 @@
     const L = t();
     return `
       <div class="summary-cards">
-        <div class="summary-card">
+        <div class="summary-card primary">
           <div class="eyebrow">${esc(L.measured)} · ${esc(L.periodCardSpent)}</div>
           <div class="amount">${usd(spendCredits)}</div>
         </div>
@@ -2216,7 +2240,7 @@
           <div class="amount small ${ceiling ? "" : "is-inferred"}">${ceiling ? usd(ceiling) : "—"}</div>
           <div class="hint">${esc(L.periodCardOneSub)}</div>
         </div>
-        <div class="summary-card">
+        <div class="summary-card infer">
           <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.periodCardLeft)}</div>
           <div class="amount small is-inferred">${leftTotal > 0 ? usd(leftTotal) : "—"}</div>
           <div class="hint">${esc(L.periodCardLeftSub)}</div>
@@ -2236,31 +2260,35 @@
 
     const total = Math.max(parts.total, 1);
     const bars = segs
-      .map(([v, cls, label]) => {
-        const pctW = Math.max(2, (v / total) * 100);
-        return `<div class="stack-seg ${cls}" style="width:${pctW.toFixed(1)}%" title="${esc(`${label} ${usd(v)}`)}"></div>`;
+      .map(([v, cls]) => {
+        const pctW = Math.max(3, (v / total) * 100);
+        return `<div class="stack-seg ${cls}" style="flex:${v}" title="${esc(usd(v))}"></div>`;
       })
       .join("");
 
     const keys = segs
       .map(
         ([v, cls, label]) =>
-          `<span><i class="k-${cls}"></i>${esc(label)} <b>${usd(v)}</b></span>`,
+          `<span class="row"><span class="lab"><i class="k-${cls}"></i>${esc(label)}</span><span class="val">${esc(usd(v))}</span></span>`,
       )
       .join("");
 
     return `
-      <div class="stack-wrap">
-        <h2>${esc(L.remainingStack)}<em>${esc(L.remainingStackSub)}</em></h2>
-        <div class="stack-bar">${bars || `<div class="stack-seg natural" style="width:100%;opacity:.25"></div>`}</div>
-        <div class="stack-keys">
-          ${keys}
-          ${state.purchased?.unlimited ? `<span>${esc(L.creditsUnlimited)}</span>` : ""}
-          ${parts.total > 0 ? `<span class="stack-total">${esc(usd(parts.total))}</span>` : ""}
+      <div class="section stack-wrap">
+        <div class="section-head">
+          <h2>${esc(L.remainingStack)}</h2>
         </div>
+        <p class="section-note">${esc(L.remainingStackSub)}</p>
+        <div class="stack-bar">${bars || `<div class="stack-seg natural" style="flex:1;opacity:.35"></div>`}</div>
+        <div class="stack-keys">${keys}</div>
         ${
-          parts.bank > 0 && ceiling
-            ? `<div class="readout" style="margin-top:6px"><span>${esc(L.resetCardsAvail(parts.bank, usd(parts.cards)))}</span></div>`
+          state.purchased?.unlimited
+            ? `<div class="readout" style="margin-top:8px"><span>${esc(L.creditsUnlimited)}</span></div>`
+            : ""
+        }
+        ${
+          parts.total > 0
+            ? `<div class="stack-total-row"><span>${esc(L.periodCardLeft)}</span><b>${esc(usd(parts.total))}</b></div>`
             : ""
         }
       </div>`;
@@ -2314,8 +2342,10 @@
       .join("");
 
     return `
-      <div style="margin-top:16px">
-        <h2>${esc(L.winTableTitle)}<em>${esc(L.winTableSub)}</em></h2>
+      <div class="section">
+        <div class="section-head">
+          <h2>${esc(L.winTableTitle)}<em>${esc(L.winTableSub)}</em></h2>
+        </div>
         <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.winTableTitle)}"><table>
           <thead><tr>
             <th>${esc(L.thWhen)}</th><th>${esc(L.thWinKind)}</th>
@@ -2327,21 +2357,22 @@
   }
 
   /*
-   * One chart: usage-window spend as bars (what each window cost in $) plus cumulative
-   * billing-period spend as a line. Future windows are light dashed bars at today's ceiling
-   * only as an estimate of room left — not a claim about past window sizes.
+   * Bars = measured $ spend per usage window (past + now only).
+   * Line = cumulative billing-period spend, with a dashed projection to renewal.
+   * Future windows are not drawn as empty boxes — they only appear in the remaining stack.
    */
   function periodCompositeChartHtml(winInfo, proj) {
     const L = t();
-    const { p, ceiling, rows } = winInfo;
-    if (!rows.length && !proj) return "";
+    const { p, rows } = winInfo;
+    const spentRows = rows.filter((r) => r.kind !== "ahead" && (r.spend > 0 || r.kind === "now"));
+    if (!spentRows.length && !proj) return "";
 
     const width = 640;
-    const height = 200;
-    const left = 44;
-    const right = 14;
-    const top = 18;
-    const bottom = 36;
+    const height = 210;
+    const left = 48;
+    const right = 16;
+    const top = 20;
+    const bottom = 40;
     const plotW = width - left - right;
     const plotH = height - top - bottom;
     const t0 = p.startMs;
@@ -2361,36 +2392,35 @@
       const ms = dayMs(key) + (i === 0 ? 0 : DAY_MS * 0.5);
       linePts.push([xAt(ms), running]);
     }
+    if (!linePts.length) linePts.push([xAt(Date.now()), 0]);
     if (linePts.length === 1) linePts.push([xAt(Date.now()), running]);
 
     const measuredSpend = running;
     const projected = proj?.projected ?? measuredSpend;
-    const maxBar = Math.max(...rows.map((r) => (r.kind === "ahead" ? ceiling || 0 : r.spend || 0)), 1);
-    const maxY = Math.max(maxBar, projected, measuredSpend, 1);
+    const maxBar = Math.max(...spentRows.map((r) => r.spend || 0), 1);
+    const maxY = Math.max(maxBar, projected, measuredSpend, 1) * 1.06;
     const y = (v) => top + plotH - (v / maxY) * plotH;
 
-    const bars = rows
+    // Even gaps between bars; width from calendar span but never a hairline.
+    const bars = spentRows
       .map((r) => {
         const x1 = xAt(r.start);
-        const x2 = xAt(r.end);
-        const w = Math.max(6, x2 - x1 - 2);
-        const value = r.kind === "ahead" ? ceiling || 0 : r.spend || 0;
-        if (!(value > 0) && r.kind !== "ahead") return "";
-        const h = Math.max(3, (value / maxY) * plotH);
+        const x2 = xAt(Math.max(r.end, r.start + DAY_MS));
+        const gap = 4;
+        const rawW = x2 - x1;
+        const w = Math.max(10, rawW - gap);
+        const value = r.spend || 0;
+        const h = Math.max(4, (value / maxY) * plotH);
         const yy = y(value);
-        const isAhead = r.kind === "ahead";
         const isNow = r.kind === "now";
-        const fill = isAhead ? "transparent" : isNow ? "var(--measured)" : "var(--measured-soft)";
-        const stroke = isAhead ? "var(--inferred)" : isNow ? "var(--measured)" : "none";
-        const dash = isAhead ? 'stroke-dasharray="4 3"' : "";
-        const op = isAhead ? 'opacity=".95"' : r.kind === "inferred" ? 'opacity=".85"' : "";
+        const fill = isNow ? "var(--measured)" : "var(--measured-soft)";
         const tip = [
-          isNow ? L.timelineNow : isAhead ? L.timelineAhead : L.timelineInferred,
+          isNow ? L.timelineNow : L.timelineInferred,
           `${shortDate(dayKey(r.start))} → ${shortDate(dayKey(r.end))}`,
-          isAhead && ceiling ? `~${usd(ceiling)}` : usd(value),
+          usd(value),
         ].join(" · ");
-        return `<rect x="${(x1 + 1).toFixed(1)}" y="${yy.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
-          fill="${fill}" stroke="${stroke}" stroke-width="${isAhead || isNow ? 1.5 : 0}" ${dash} ${op} rx="3"><title>${esc(tip)}</title></rect>`;
+        return `<rect x="${(x1 + gap / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
+          fill="${fill}" rx="4"><title>${esc(tip)}</title></rect>`;
       })
       .join("");
 
@@ -2398,42 +2428,51 @@
     const last = linePts[linePts.length - 1];
     const lastV = last[1];
     let projLine = "";
-    if (proj && projected >= lastV) {
+    if (proj && projected >= lastV - 0.01) {
       const endX = xAt(t1);
       const endY = y(projected);
       projLine = `<line x1="${last[0].toFixed(1)}" y1="${y(lastV).toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}"
-        stroke="var(--inferred)" stroke-width="2.2" stroke-dasharray="6 5" stroke-linecap="round">
+        stroke="var(--inferred)" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round">
         <title>${esc(`${L.inferred} ${usd(projected)}`)}</title></line>
-        <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="3" fill="var(--inferred)" />
-        <text x="${(endX - 4).toFixed(1)}" y="${Math.max(top + 12, endY - 8).toFixed(1)}" text-anchor="end"
+        <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="3.5" fill="var(--inferred)" />
+        <text x="${(endX - 5).toFixed(1)}" y="${Math.max(top + 14, endY - 9).toFixed(1)}" text-anchor="end"
           style="font-family:var(--mono);font-size:11px;fill:var(--inferred-text)">${esc(usd(projected))}</text>`;
     }
 
     const nowX = xAt(Date.now());
+    const gridYs = [0.25, 0.5, 0.75]
+      .map((f) => {
+        const yy = y(maxY * f);
+        return `<line x1="${left}" x2="${width - right}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--rule)" stroke-width="1" opacity=".55" />`;
+      })
+      .join("");
 
     return `
-      <div class="chart" style="margin-top:16px">
-        <h2>${esc(L.chartComposite)}<em>${esc(L.chartCompositeSub)}</em></h2>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartComposite)}" style="width:100%;height:auto;display:block">
+      <div class="section chart">
+        <div class="section-head">
+          <h2>${esc(L.chartComposite)}<em>${esc(L.chartCompositeSub)}</em></h2>
+        </div>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartComposite)}">
+          ${gridYs}
           <line x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule)" />
           ${bars}
-          <polyline points="${poly}" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".9">
+          <polyline points="${poly}" fill="none" stroke="var(--ink)" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
             <title>${esc(L.chartLineSpend)}</title>
           </polyline>
           <circle cx="${last[0].toFixed(1)}" cy="${y(lastV).toFixed(1)}" r="3.5" fill="var(--ink)" />
-          <text x="${(last[0] - 6).toFixed(1)}" y="${Math.max(top + 12, y(lastV) - 8).toFixed(1)}" text-anchor="end"
+          <text x="${(last[0] - 7).toFixed(1)}" y="${Math.max(top + 14, y(lastV) - 9).toFixed(1)}" text-anchor="end"
             style="font-family:var(--mono);font-size:11px;fill:var(--ink)">${esc(usd(lastV))}</text>
           ${projLine}
           <line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top}" y2="${y(0)}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3" />
-          <text x="${nowX.toFixed(1)}" y="${top - 4}" text-anchor="middle" style="font-size:10px;fill:var(--ink-3)">${esc(L.today)}</text>
-          <text x="${left}" y="${height - 10}" style="font-size:10px;fill:var(--ink-3)">${esc(shortDate(dayKey(t0)))}</text>
-          <text x="${width - right}" y="${height - 10}" text-anchor="end" style="font-size:10px;fill:var(--ink-3)">${esc(shortDate(dayKey(t1)))}</text>
+          <text x="${nowX.toFixed(1)}" y="${top - 5}" text-anchor="middle">${esc(L.today)}</text>
+          <text x="${left}" y="${height - 12}">${esc(shortDate(dayKey(t0)))}</text>
+          <text x="${width - right}" y="${height - 12}" text-anchor="end">${esc(shortDate(dayKey(t1)))}</text>
         </svg>
-        <div class="legend-key" style="flex-wrap:wrap">
-          <span><i class="key-solid" style="background:var(--measured-soft)"></i>${esc(L.chartBarPast)}</span>
+        <div class="legend-key">
+          <span><i class="key-solid soft"></i>${esc(L.chartBarPast)}</span>
           <span><i class="key-solid"></i>${esc(L.chartBarNow)}</span>
-          <span><i class="key-dash"></i>${esc(L.chartBarAhead)}</span>
-          <span style="font-family:var(--mono);font-size:10px">— ${esc(L.chartLineSpend)}</span>
+          <span><i class="key-line"></i>${esc(L.chartLineSpend)}</span>
+          <span><i class="key-line dash"></i>${esc(L.inferred)}</span>
         </div>
       </div>`;
   }
@@ -2537,40 +2576,34 @@
           ? L.projCeilingRoom(usd(projection.cap), projection.openings)
           : "";
 
+    const footnotes = [
+      projection
+        ? L.projBasis(usd(projection.rate), projection.basisDays, shortDate(dayKey(p.fullEndMs)), projection.remainingDays)
+        : null,
+      projection ? L.projFloor(usd(projection.measured)) : null,
+      capNote || null,
+      projection?.early ? L.projEarly : null,
+      grant && ceiling ? L.periodWindows(grant.windows, usd(ceiling)) : null,
+      grant && ceiling ? (grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset) : null,
+      grant && ceiling ? L.periodFloor : null,
+      cards.n > 0 ? L.resetCardsUsed(cards.n, usd(cards.credits)) : null,
+    ].filter(Boolean);
+
     return `
-      ${periodSummaryCardsHtml(s.credits, ceiling, leftTotal)}
+      <div class="section">${periodSummaryCardsHtml(s.credits, ceiling, leftTotal)}</div>
       ${remainingStackHtml(parts, ceiling)}
       ${
-        winInfo.rows.length || projection
+        spentRowsHaveData(winInfo) || projection
           ? periodCompositeChartHtml(winInfo, projection)
-          : `<div class="readout" style="margin-top:14px"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
-      }
-      ${
-        projection
-          ? `<div class="readout" style="margin-top:10px"><span>${esc(
-              L.projBasis(usd(projection.rate), projection.basisDays, shortDate(dayKey(p.fullEndMs)), projection.remainingDays),
-            )}</span></div>
-             <div class="readout"><span>${esc(L.projFloor(usd(projection.measured)))}</span></div>
-             ${capNote ? `<div class="readout"><span>${esc(capNote)}</span></div>` : ""}
-             ${projection.early ? `<div class="readout"><span>${esc(L.projEarly)}</span></div>` : ""}`
-          : ""
-      }
-      ${
-        grant && ceiling
-          ? `<div class="readout" style="margin-top:10px">
-               <span>${esc(L.periodWindows(grant.windows, usd(ceiling)))}</span>
-               <span>${esc(grant.resets > 0 ? L.periodResets(grant.resets) : L.periodNoReset)}</span>
-               <span>${esc(L.periodFloor)}</span>
-             </div>`
-          : ""
-      }
-      ${
-        cards.n > 0
-          ? `<div class="readout" style="margin-top:6px"><span>${esc(L.resetCardsUsed(cards.n, usd(cards.credits)))}</span></div>`
-          : ""
+          : `<div class="section readout"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
       }
       ${periodWindowTableHtml(winInfo)}
-      <div class="readout" style="margin-top:12px">
+      ${
+        footnotes.length
+          ? `<div class="section"><div class="readout">${footnotes.map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>`
+          : ""
+      }
+      <div class="readout meta">
         <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
         <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
         <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
@@ -2578,6 +2611,10 @@
       </div>
       <div class="why">${esc(p.isBilling ? L.periodWhy : L.monthWhy)}</div>
     `;
+  }
+
+  function spentRowsHaveData(winInfo) {
+    return (winInfo.rows || []).some((r) => r.kind !== "ahead" && (r.spend > 0 || r.kind === "now"));
   }
 
   function splitHtml(s) {
