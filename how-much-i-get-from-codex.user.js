@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.6.0
+// @version      2.6.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -1181,12 +1181,18 @@
    * is identical on every day — checked across 26 consecutive days on a live account with a
    * spread of exactly zero. A hundred of them is the allowance.
    *
-   * This needs one day of usage rather than a whole window, and it never reads the rate limit
-   * window, which on some plans is a placeholder that never moves.
+   * One day of usage is enough. Samples are taken from the *current* usage window first:
+   * older days can describe a different grant after a plan change or a mid-period reset, and
+   * carrying them forward is how a stale $199 figure outlives a window that already caps at
+   * $50. The full history is only a fallback when this window has no percent signal yet.
    */
   function measuredAllowance() {
-    const samples = state.days.filter((d) => d.percent > 0 && d.credits > 0);
-    if (!samples.length) return null;
+    const all = state.days.filter((d) => d.percent > 0 && d.credits > 0);
+    if (!all.length) return null;
+
+    const winFrom = state.win ? dayKey(state.win.startAt) : null;
+    const inWindow = winFrom ? all.filter((d) => d.date >= winFrom) : [];
+    const samples = inWindow.length ? inWindow : all;
 
     /*
      * The ratio holds only while the plan does. An upgrade mid-range splits the samples into
@@ -1206,8 +1212,9 @@
     return {
       credits: median * 100,
       samples: agreeing.length,
-      // Days whose ratio disagrees with today's — evidence the allowance changed in range.
+      // Days in the pool whose ratio disagrees with today's — evidence the allowance moved.
       dropped: samples.length - agreeing.length,
+      scopedToWindow: inWindow.length > 0,
     };
   }
 
@@ -1215,6 +1222,22 @@
   // no counting and no guessing: crossing 100% simply means another allowance was used.
   const allowancesUsed = (fromKey, toKey) =>
     state.days.filter((d) => d.date >= fromKey && d.date <= toKey).reduce((a, d) => a + d.percent, 0) / 100;
+
+  /*
+   * Live window size: spend in this usage window ÷ the rate-limit used%. This is what actually
+   * gates you right now. Integer used% and mid-day opens make it noisy early on, so it only
+   * overrides the daily-ratio figure once the window has real usage behind it — and always
+   * wins when the window is exhausted, because "100% used after $50" means one allowance is
+   * $50, not whatever older days still imply.
+   */
+  function windowAllowance(spendCredits, usedPercent, limitReached) {
+    if (!(spendCredits > 0) || !state.win?.inferable) return null;
+    if (limitReached || usedPercent >= 99.5) {
+      return usedPercent > 0 ? spendCredits / (usedPercent / 100) : spendCredits;
+    }
+    if (usedPercent >= 20) return spendCredits / (usedPercent / 100);
+    return null;
+  }
 
   function cycleReading() {
     if (!state.win) return null;
@@ -1229,14 +1252,22 @@
      * than a couple of days would be divided into a day's spend and produce a ceiling several
      * times too large. Better to show nothing than a confidently wrong number.
      */
-    // Prefer the measured allowance. Dividing window spend by the window percentage was only
-    // ever a fallback for accounts that report no daily percentages, and it inherits every
-    // problem the window has: placeholder resets, mid-day boundaries, integer percentages.
     const measured = measuredAllowance();
     let ceiling = measured ? measured.credits : null;
 
-    if (!ceiling && state.win.inferable) {
-      if (used > 0) ceiling = s.credits / (used / 100);
+    const fromWindow = windowAllowance(s.credits, used, state.win.limitReached);
+    if (fromWindow > 0) {
+      if (!ceiling) {
+        ceiling = fromWindow;
+      } else {
+        const rel = Math.abs(ceiling - fromWindow) / Math.max(ceiling, fromWindow);
+        // The live rate-limit window is ground truth for *this* allowance. Daily ratios can
+        // lag a change or still reflect a larger grant from earlier in the billing period.
+        if (rel > 0.05) ceiling = fromWindow;
+      }
+    } else if (!ceiling && state.win.inferable) {
+      // Sparse early window: only the weak fallback remains.
+      if (used > 0 && s.credits > 0) ceiling = s.credits / (used / 100);
       else if (state.win.limitReached && s.credits > 0) ceiling = s.credits;
     }
 
