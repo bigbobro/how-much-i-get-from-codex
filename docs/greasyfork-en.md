@@ -22,8 +22,9 @@ On a real Plus account: **49.897 credits per percent, on all 26 days with usage,
 exactly zero.** One of those days came in at 100.000% — an entire week's allowance, gone in a
 single afternoon.
 
-Dollars come out at $0.04 per credit, checked against OpenAI's published API prices.
-Eighteen rate card entries, all landing on the same number.
+Token-only days use OpenAI's current Codex rate card, checked 2026-08-10. The dollar display
+uses an explicit $0.04-per-credit assumption from the credit purchase page; it is configurable
+because OpenAI does not publish a universal credit-to-dollar exchange rate.
 
 ### What it won't do
 

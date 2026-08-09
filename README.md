@@ -54,6 +54,10 @@ the window is not always real: on some plans `used_percent` sits at 0 permanentl
 `reset_at` slides forward with the clock. Dividing spend by that produces a confident number
 resting on nothing. The panel detects it and hides everything built on those boundaries.
 
+When both signals exist, the daily ratio owns the allowance value and the live window
+division is a cross-check. If they differ by more than 5%, the panel keeps the measured daily
+value and shows both numbers instead of silently changing sources.
+
 It also disposes of the question *when will it reset next*, by never asking. A day's
 percentage is how much of an allowance that day ate, so adding them up counts allowances
 directly. Crossing 100% means another one was spent.
@@ -62,42 +66,40 @@ directly. Crossing 100% means another one was spent.
 
 Personal plans report credits directly, and reported credits always win. Plans that meter no
 credits report 0, and only then does the script price the tokens itself from the
-[official rate card](https://help.openai.com/en/articles/20001106-codex-rate-card).
+[official Codex rate card](https://learn.chatgpt.com/docs/pricing), last checked **2026-08-10**.
 
 | Model | Uncached input | Cached input | Output |
 |---|---|---|---|
 | gpt-5.6-sol | 125 | 12.5 | 750 |
-| gpt-5.6-terra | 62.5 | 6.25 | 375 |
-| gpt-5.6-luna | 25 | 2.5 | 150 |
+| gpt-5.6-terra | 50 | 5 | 300 |
+| gpt-5.6-luna | 5 | 0.5 | 30 |
 | gpt-5.5 | 125 | 12.5 | 750 |
-| gpt-5.5-cyber | 500 | 50 | 3000 |
 | gpt-5.4 | 62.5 | 6.25 | 375 |
 | gpt-5.4-mini | 18.75 | 1.875 | 113 |
-| gpt-5.3-codex | 43.75 | 4.375 | 350 |
-| gpt-5.2 | 43.75 | 4.375 | 350 |
+| gpt-image-2 *(text tokens)* | 125 | 31.25 | 250 |
 
-Credits per 1M tokens. Fast mode multiplies them — **2.5×** for GPT-5.6 and 5.5, **2×** for
+Credits per 1M tokens. The analytics fields are text-token fields, so GPT-Image-2 uses the
+rate card's text row, not its image-token row. Removed models keep a separate legacy table in
+the script so historical rows remain visible, and the panel flags when it uses one.
+
+Fast mode multiplies current published rates — **2.5×** for GPT-5.6 and 5.5, **2×** for
 GPT-5.4 ([source](https://learn.chatgpt.com/docs/agent-configuration/speed)) — and the script
-reads the `speed` field so each tier is priced separately.
+reads the `speed` field so each tier is priced separately. Turns split between standard and
+fast rows by credit share, the same rule shown in the UI.
+
+If a model has no rate, its tokens are not given a made-up price. Any difference between the
+known model rows and OpenAI's reported day total appears as **Unattributed**, so model totals
+still reconcile to the headline.
 
 ### Dollars
 
-**1 credit = $0.04**, checked against OpenAI's
-[published API prices](https://developers.openai.com/api/docs/pricing). Every rate card entry
-divides into its list price at exactly that rate:
+The display converts at **1 credit = $0.04**, taken from the credit purchase page. OpenAI does
+not publish a universal credit-to-dollar exchange rate, so this is an explicit configurable
+assumption rather than part of the rate card. Change `USD_PER_CREDIT` at the top of the script
+if your account shows a different price.
 
-| | rate card | list price | $/credit |
-|---|---|---|---|
-| gpt-5.6-sol input | 125 credits / 1M | $5.00 / 1M | 0.0400 |
-| gpt-5.6-luna input | 25 | $1.00 | 0.0400 |
-| gpt-5.4-mini input | 18.75 | $0.75 | 0.0400 |
-| gpt-5.6-sol output | 750 | $30.00 | 0.0400 |
-
-Six models across three token classes, eighteen checks, all landing on the same number.
-Change `USD_PER_CREDIT` at the top of the script if OpenAI ever moves it.
-
-Note what the dollar figure means: **what the same work would cost at API list price.** Not
-OpenAI's cost, and not the price of the allowance.
+The dollar figure is therefore **credits × the configured display rate**. It is not OpenAI's
+cost, and it is not the price of the allowance.
 
 ---
 
@@ -115,7 +117,11 @@ whenever the ground under it gives way:
   what the payment bought — 43% high on a doubling. The count is shown, the product is not.
 - **Fast mode with no published multiplier.** Priced at the standard rate and flagged as
   understated, rather than borrowing a neighbouring model's multiplier.
-- **A model missing from the rate card.** The reported credits take over.
+- **A model missing from the rate card.** Its tokens are not priced; reported credits remain
+  visible in an Unattributed row.
+- **Several matching subscriptions.** If two active workspace seats or two active personal
+  subscriptions could both own the Codex context, there is no defensible renewal date. The
+  panel falls back to the calendar month and hides renewal-dependent figures.
 
 ### Projections
 
@@ -155,7 +161,9 @@ Two things the API does not expose at all:
 One login can hold a personal Plus and a workspace seat at once. The Codex endpoints answer
 for whichever context Codex is in, and that is **not always the account the profile menu
 names** — a `ChatGPT-Account-ID` header does not override it. The masthead therefore carries
-the plan and the account email, and says so outright when more than one subscription is live.
+the plan and the account email. One personal plus one workspace subscription can be matched
+by structure; several active subscriptions of the same structure are treated as ambiguous,
+with no per-seat local history written until the seat can be identified.
 
 Every request carries `workspace_user=true`, so the figures cover the current seat only.
 
@@ -186,24 +194,37 @@ trigger — reload once and it is there.
 python3 -m http.server 8731
 ```
 
+Open `http://127.0.0.1:8731/smoketest.html?all=1` to run all deterministic assertions. The
+harness freezes the clock, cache-busts the userscript, checks the seven expected requests,
+rejects userscript console errors, and prints one PASS/FAIL line per scenario.
+
 | Scenario | What it covers |
 |---|---|
-| *(default)* | rate card + window division. **Must read $249.83 spent / $250.00 ceiling** |
+| *(default)* | window-percent fallback, period source label, view/language focus, close/Escape/backdrop focus restoration |
 | `#personal` | Plus-style: the workspace breakdown 400s, allowance measured at **$199.59** |
 | `#spill` | billing period opens inside an unfetchable window — its in-period spend must show as a truncated row, and the table total must equal the headline **$209.57** |
+| `#currentspill` | the live window crosses the billing-period start — current row and total are clipped to **$149.90** |
 | `#multi` | 7-day window, a completed cycle, multi-opening forecast |
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
 | `#changed` | allowance doubles mid-range; the reading follows today and says what it dropped |
-| `#unknownmodel` | a metered day whose only model is not in the rate card — must never show NaN |
+| `#conflict` | daily measurement **$399.18** wins over a conflicting **$299.39** live-window inference, with both disclosed |
+| `#unknownmodel` | a metered unknown model reconciles the reported **$49.90** into Unattributed, never NaN or a zero-dollar model row |
+| `#mixedunknown` | a known row keeps its **$0.20** price while only the **$1.80** reported remainder becomes Unattributed |
 | `#bank` | reset cards left, counted on top of the windows that roll on their own |
+| `#unusedcard` | a status of `unused` is not mistaken for `used` |
 | `#twosubs` | one login, two subscriptions — the panel must name which one it reports |
+| `#sameworkspaces` | two matching workspace subscriptions — calendar-month fallback, no renewal projection, no per-seat memory write |
 | `#hourly` | 5-hour window — refuses to infer, and says why |
 | `#fresh` | placeholder window |
-| `#fast` | fast mode, including a model with no published multiplier |
+| `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
 | `#noent` | no renewal date — falls back to the calendar month |
+| `#zerobasis` | the latest completed zero-spend window remains a valid pace basis |
+| `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
+| `#projection` | placeholder window keeps measured spend and calendar-day average, but no uncapped projection |
 
-The default case is the regression that matters: recorded real usage, and $250.00 is the
-ceiling it has to reproduce.
+The default case still reproduces the recorded **$249.83 spent / $250.00 allowance**. The
+suite also checks every panel for `NaN` / `undefined` and verifies that all window-table
+totals reconcile to their period headlines.
 
 The stub honours `start_date` / `end_date` deliberately. One that returned everything would
 let a scenario pass on data the script never fetched, which is how an under-fetching bug

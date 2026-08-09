@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      2.9.0
+// @version      3.0.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -30,11 +30,11 @@
  *   spend ÷ used percent                            = the ceiling  inferred
  *
  * Reported credits win wherever they exist — they are what OpenAI actually charged. The
- * rate card prices the days without them, and that path is exact rather than an
- * approximation: the per-model shares this script computes match the ones OpenAI returns
- * from its own endpoint to 4-5 significant figures. Everything downstream of the division
- * is an estimate, and the interface says so — solid blue is measured, dashed amber is
- * inferred.
+ * current rate card prices days without them. When a reported total contains an unknown
+ * model, the known rows keep their priced amounts and the remainder stays explicitly
+ * unattributed instead of being hidden in those rows. Everything downstream of a window
+ * percentage division is an estimate, and the interface says so — solid blue is measured,
+ * dashed amber is inferred.
  *
  * Nothing is requested until you open the panel. No background polling.
  */
@@ -46,19 +46,26 @@
   window.__howMuchIGet = true;
 
   // ── Rate card ───────────────────────────────────────────────────────────
-  // credits per 1M tokens: [uncached input, cached input, output]
-  // https://help.openai.com/en/articles/20001106-codex-rate-card
+  // Credits per 1M tokens: [uncached input, cached input, output]. Verified against
+  // https://learn.chatgpt.com/docs/pricing on this date. gpt-image-2 uses the text-token
+  // row because these analytics fields are explicitly text input/output tokens.
+  const RATE_CARD_VERIFIED = "2026-08-10";
   const RATE_CARD = {
     "gpt-5.6-sol": [125, 12.5, 750],
-    "gpt-5.6-terra": [62.5, 6.25, 375],
-    "gpt-5.6-luna": [25, 2.5, 150],
+    "gpt-5.6-terra": [50, 5, 300],
+    "gpt-5.6-luna": [5, 0.5, 30],
     "gpt-5.5": [125, 12.5, 750],
-    "gpt-5.5-cyber": [500, 50, 3000],
     "gpt-5.4": [62.5, 6.25, 375],
     "gpt-5.4-mini": [18.75, 1.875, 113],
+    "gpt-image-2": [125, 31.25, 250],
+  };
+
+  // Retained only so historical analytics rows do not disappear when a model leaves the
+  // current card. The UI calls these rows out instead of presenting them as current prices.
+  const LEGACY_RATE_CARD = {
+    "gpt-5.5-cyber": [500, 50, 3000],
     "gpt-5.3-codex": [43.75, 4.375, 350],
     "gpt-5.2": [43.75, 4.375, 350],
-    "gpt-image-2": [200, 50, 750],
   };
 
   /*
@@ -112,7 +119,11 @@
       inferred: "Inferred",
       noCeiling: (p) => `${p}% used — not enough yet to infer a ceiling`,
       twoSubscriptions: (n, plan) => `This login holds ${n} active subscriptions. Every figure here belongs to the ${plan} one, whichever the Codex API answers for. That is not always the account the profile menu names.`,
+      ambiguousSubscription: (n, structure) =>
+        `This login has ${n} active ${structure} subscriptions, so the Codex seat cannot be matched to one renewal date. This month is shown instead; renewal-dependent figures are hidden.`,
       measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
+      allowanceConflict: (daily, window) =>
+        `Daily usage measures this allowance as ${daily}, while the live window percentage implies ${window}. The measured daily value wins; the mismatch is left visible for diagnosis.`,
       overspent: (n) => `${n} allowances used this cycle, so it reset partway through. "Left" below means what remains of the current one.`,
       allowanceChanged: (n) => `${n} earlier day${n === 1 ? "" : "s"} imply a different allowance, so the plan changed in this range. Only days matching today are counted.`,
       topRateWarning: "Some days have no per-model split and no reported credits, so they are priced at the dearest model's rate. Those days read high.",
@@ -181,6 +192,7 @@
       chartDaily: "Spend per day",
       chartDailySub: (r) => `dashed line is ${r} per calendar day`,
       chartModel: "Where the money goes by model",
+      unattributed: "Unattributed",
       seeNumbers: "See the numbers",
       today: "today",
       partialDay: "today is still filling — this bar will grow",
@@ -202,7 +214,7 @@
       cycleMemClearConfirm:
         "Clear the remembered usage windows for this subscription on this browser? This cannot be undone.",
       cycleMemEmpty: "No local history yet — each finished usage window is saved here when a new one opens.",
-      gaugeAria: (a, b) => `spent ${a} of an inferred ${b} ceiling`,
+      gaugeAria: (a, b, isMeasured) => `spent ${a} of ${isMeasured ? "a measured" : "an inferred"} ${b} ceiling`,
 
       payback: "Payback",
       paybackPaidLead: "paid",
@@ -260,7 +272,8 @@
       noWindow: "The API returned no rate limit window, so the usage-window range is unknown.",
 
       notesTitle: "What is measured and what is inferred",
-      n1: "Cost is the credits OpenAI itself reports, wherever the API returns them. Days without reported credits are priced from per-model token counts × the official rate card — that path matches OpenAI's own model-share numbers to 4-5 significant figures. The cached/uncached/output split always follows the rate card's shape, scaled to the reported total.",
+      n1: (d) => `Cost is the credits OpenAI itself reports, wherever the API returns them. Days without reported credits are priced from per-model token counts × the official rate card verified ${d}. The cached/uncached/output split follows that card's shape, scaled to the reported total when every model is priced.`,
+      nLegacy: (m) => `Historical models use their retained legacy rate rather than the current card: ${m}`,
       nTurnSplit: "When a model ran both standard and fast, its turns are split between the two rows by credit share — so a row's turns can be fractional, and per-turn figures use the unrounded split.",
       n2: (r) => `Credits convert at 1 credit = $${r} (1000 credits = $40). OpenAI has never published this rate — change USD_PER_CREDIT at the top of the script if yours differs.`,
       n3: "The ceiling is inferred: spend ÷ the used percentage the API reports. The more you have used, the tighter it gets.",
@@ -269,7 +282,7 @@
       n11: "The allowance window here is shorter than a day. Usage is only reported by whole days, so no ceiling can be inferred from it and the projections are hidden.",
       n5: "Codex, ChatGPT Work and ChatGPT for Excel draw on the same pool, but this API only sees Codex — so the spend, and the ceiling, come out low.",
       n6: "Scoped to the current seat only. Other people in the workspace are not counted.",
-      n7: (m) => `Not in the rate card, so not priced: ${m}`,
+      n7: (m) => `Not in the rate card, so its tokens are not priced: ${m}. Any reported remainder stays visible as Unattributed.`,
       n8: "There is no per-repository breakdown in the API, so spend cannot be split by project.",
       n9: "Nothing is requested until you open this panel, and nothing runs in the background after you close it.",
 
@@ -295,7 +308,11 @@
       inferred: "推算",
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
       twoSubscriptions: (n, plan) => `这个登录下有 ${n} 份有效订阅。这里的数字都属于 ${plan} 这一份，也就是 Codex 接口当前回答的那份。它跟档案菜单显示的账号常常不是同一个。`,
+      ambiguousSubscription: (n, structure) =>
+        `这个登录下有 ${n} 份有效的${structure === "workspace" ? "工作区" : "个人"}订阅，无法把 Codex seat 唯一对应到一个续费日。这里退回显示本自然月，并隐藏依赖续费日的数字。`,
       measuredFrom: (n) => `由 ${n} 天用量测出`,
+      allowanceConflict: (daily, window) =>
+        `每日用量测出的本份额度是 ${daily}，实时窗口百分比反推的是 ${window}。这里采用每日实测值，同时保留差异供排查。`,
       overspent: (n) => `这份用量窗口已经用掉 ${n} 份额度，说明中途重置过。下面的「未用」是指当前这一份还剩多少。`,
       allowanceChanged: (n) => `另外 ${n} 天推出来的额度跟今天不一样，说明这段时间里换过套餐。只采用与今天一致的那些天。`,
       topRateWarning: "有些天既没有按模型的拆分，接口也没给 credits，只能按最贵的模型计价，这些天会偏高。",
@@ -364,6 +381,7 @@
       chartDaily: "每天花了多少",
       chartDailySub: (r) => `虚线是自然日日均 ${r}`,
       chartModel: "钱花在哪个模型上",
+      unattributed: "未归因",
       seeNumbers: "看具体数字",
       today: "今天",
       partialDay: "今天还没走完，这一天的数还在涨",
@@ -384,7 +402,7 @@
       cycleMemClear: "清除本订阅的本地记录",
       cycleMemClearConfirm: "清除本浏览器里这份订阅的用量窗口记录？清除后无法恢复。",
       cycleMemEmpty: "还没有本地记录 —— 等新的用量窗口打开时，会把刚结束的那一份记在这里。",
-      gaugeAria: (a, b) => `已花 ${a}，推算额度 ${b}`,
+      gaugeAria: (a, b, isMeasured) => `已花 ${a}，${isMeasured ? "实测" : "推算"}额度 ${b}`,
 
       payback: "回本",
       paybackPaidLead: "付了",
@@ -442,7 +460,8 @@
       noWindow: "接口没返回限流窗口，确定不了用量窗口的范围。",
 
       notesTitle: "哪些是实测，哪些是推算",
-      n1: "花费优先取 OpenAI 自己返回的 credits 记账值；接口没给 credits 的天，才按每模型 token 数 × 官方 rate card 估 —— 这条路径跟 OpenAI 返回的模型占比对过，吻合到 4~5 位有效数字。缓存 / 未缓存 / 输出的拆分始终按 rate card 的结构、对齐到记账总额。",
+      n1: (d) => `花费优先取 OpenAI 自己返回的 credits 记账值；接口没给 credits 的天，才按每模型 token 数 × ${d} 核对过的官方 rate card 估。所有模型都能计价时，缓存 / 未缓存 / 输出的拆分按 rate card 的结构对齐到记账总额。`,
+      nLegacy: (m) => `历史模型沿用保留的旧 rate，不把它冒充成当前 rate card：${m}`,
       nTurnSplit: "同一个模型同时跑了标准和 fast 时，turns 按两行的花费份额拆开 —— 所以单行的 turns 可能是小数，「每 turn」用拆分前的精确值算。",
       n2: (r) => `credits 换美元按 1 credit = $${r}（1000 credits = $40）。这个汇率 OpenAI 从没公布过 —— 你那边不一样就改脚本顶部的 USD_PER_CREDIT。`,
       n3: "额度是推算的：花费 ÷ 接口给的已用百分比。用得越多，推得越准。",
@@ -451,7 +470,7 @@
       n11: "这个账号的额度窗口不到一天，而用量只按整天上报，没法从中反推额度，相关推算已隐藏。",
       n5: "Codex、ChatGPT Work、ChatGPT for Excel 共用一个额度池，但这个接口只看得到 Codex —— 所以花费偏低，推算额度也跟着偏低。",
       n6: "只统计当前 seat，不含 workspace 里其他人。",
-      n7: (m) => `不在 rate card 里，没计价：${m}`,
+      n7: (m) => `不在 rate card 里，token 没法计价：${m}。接口报出的剩余花费仍会显示为「未归因」。`,
       n8: "接口没有按仓库拆的维度，所以分不出「哪个项目花了多少」。",
       n9: "不点开就不发任何请求，关掉之后也不会在后台跑。",
 
@@ -464,6 +483,7 @@
   const savedLang = localStorage.getItem(LANG_KEY);
   let lang = savedLang || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en");
   const t = () => I18N[lang];
+  const modelName = (name) => (name === "__unattributed__" ? t().unattributed : name);
 
   // ── Formatting ──────────────────────────────────────────────────────────
 
@@ -472,8 +492,6 @@
 
   const usd = (c) => "$" + (c * USD_PER_CREDIT).toFixed(2);
   const int = (v) => Math.round(v).toLocaleString("en-US");
-  // Turns are split across a model's speed rows by token share, so a row can hold a
-  // fraction of one. Rounding that to "0" beside a real per-turn price reads as a bug.
   // Model turns are split between speed rows by credit share, so they can be fractional.
   // Rounding them away would leave spend ÷ turns unable to reproduce the per-turn column.
   const turnCount = (v) =>
@@ -507,7 +525,8 @@
   // ── Pricing ─────────────────────────────────────────────────────────────
 
   function priceOf(entry) {
-    const rate = RATE_CARD[entry.model];
+    const legacy = !RATE_CARD[entry.model] && !!LEGACY_RATE_CARD[entry.model];
+    const rate = RATE_CARD[entry.model] || LEGACY_RATE_CARD[entry.model];
     if (!rate) return { unknown: true, unpricedFast: false, credits: 0, uncached: 0, cached: 0, output: 0 };
 
     const isFast = !!entry.speed && entry.speed !== "standard";
@@ -519,6 +538,7 @@
 
     return {
       unknown: false,
+      legacy,
       unpricedFast: isFast && !FAST_MULTIPLIER[entry.model],
       credits: uncached + cached + output,
       uncached,
@@ -619,6 +639,8 @@
    * usage only reports how many are still available; the detail endpoint lists status and
    * timestamps so we can also count cards used inside the current payment window.
    */
+  const USED_RESET_STATUSES = new Set(["used", "redeemed", "spent", "consumed", "applied", "claimed"]);
+
   function parseResetCredits(detail, fallbackAvailable, rangeStartMs, rangeEndMs) {
     const availableFromUsage = Math.max(0, Number(fallbackAvailable) || 0);
     const rows = Array.isArray(detail?.credits)
@@ -640,7 +662,7 @@
       const usedAt =
         Date.parse(row?.used_at || row?.redeemed_at || row?.consumed_at || row?.applied_at || "") || 0;
 
-      const isUsed = /used|redeemed|spent|consumed|applied|claimed/.test(status);
+      const isUsed = USED_RESET_STATUSES.has(status);
       if (!isUsed) continue;
 
       const when = usedAt || granted;
@@ -668,8 +690,10 @@
       .filter((a) => a?.entitlement?.has_active_subscription && a.entitlement.renews_at)
       .filter((a) => Number.isFinite(Date.parse(a.entitlement.renews_at)));
 
-    const pick = live.find((a) => a.account?.structure === wanted) || live[0];
-    if (!pick) return null;
+    if (!live.length) return null;
+
+    const matching = live.filter((a) => a.account?.structure === wanted);
+    const pick = matching.length === 1 ? matching[0] : live.length === 1 ? live[0] : null;
 
     /*
      * One login can hold both a personal Plus and a workspace seat. The Codex endpoints
@@ -680,13 +704,24 @@
      */
     const distinct = new Set(live.map((a) => a.account?.account_id).filter(Boolean));
 
+    if (!pick) {
+      return {
+        renewsAt: null,
+        billingPeriod: null,
+        liveSubscriptions: distinct.size || live.length,
+        accountId: "",
+        structure: wanted,
+        ambiguous: true,
+      };
+    }
+
     return {
       renewsAt: Date.parse(pick.entitlement.renews_at),
       billingPeriod: pick.entitlement.billing_period,
       liveSubscriptions: distinct.size,
       accountId: pick.account?.account_id || "",
       structure: pick.account?.structure || "",
-      subscriptionPlan: pick.entitlement?.subscription_plan || "",
+      ambiguous: false,
     };
   }
 
@@ -753,6 +788,7 @@
 
     const days = [];
     const unknownModels = new Set();
+    const legacyModels = new Set();
     const unpricedFast = new Set();
 
     for (const countRow of counts.data || []) {
@@ -783,6 +819,7 @@
 
         const p = priceOf(m);
         if (p.unknown) unknownModels.add(m.model);
+        if (p.legacy) legacyModels.add(m.model);
         if (p.unpricedFast) unpricedFast.add(m.model);
         priced.push({ m, p });
 
@@ -797,15 +834,16 @@
       }
 
       // A model that ran both standard and fast appears as two rows, but the turn count is
-      // reported once per model name. Give each row its token share instead of the whole
-      // count, or the model table double-counts turns and every per-turn figure halves.
-      const tokensByModel = new Map();
-      for (const { m } of priced) {
-        tokensByModel.set(m.model, (tokensByModel.get(m.model) || 0) + m.text_total_tokens);
+      // reported once per model name. Split those turns by the same credit share the UI says
+      // it uses, so both paths produce one reproducible per-turn number.
+      const creditsByModel = new Map();
+      for (const { m, p } of priced) {
+        if (p.credits > 0) creditsByModel.set(m.model, (creditsByModel.get(m.model) || 0) + p.credits);
       }
 
       for (const { m, p } of priced) {
-        const share = m.text_total_tokens / (tokensByModel.get(m.model) || m.text_total_tokens);
+        if (!(p.credits > 0)) continue;
+        const share = p.credits / creditsByModel.get(m.model);
         models.push({
           model: m.model,
           speed: m.speed || "standard",
@@ -839,7 +877,6 @@
         let reported = included;
         if (onDemand > 0 && (!(included > 0) || onDemand > included + 0.01)) reported = included + onDemand;
         day.credits = reported > 0 ? reported : totalsPrice.credits;
-        day.onDemandCredits = onDemand;
 
         // No per-model tokens were priced, so the day total stands in. Where it came from
         // the rate card rather than the API, sol's rates priced everything and a mini-heavy
@@ -885,18 +922,32 @@
         const onDemand = Number(totals.on_demand_credits) || 0;
         let reported = included;
         if (onDemand > 0 && (!(included > 0) || onDemand > included + 0.01)) reported = included + onDemand;
-        day.onDemandCredits = onDemand;
         if (day.credits > 0 && reported > 0) {
-          const scale = reported / day.credits;
+          const hasUnknown = priced.some(({ p }) => p.unknown);
+          const scale = hasUnknown ? Math.min(1, reported / day.credits) : reported / day.credits;
           for (const k of ["credits", "uncachedCredits", "cachedCredits", "outputCredits", "fastCredits"]) day[k] *= scale;
           for (const m of models) m.credits *= scale;
+          day.credits = reported;
         } else if (reported > 0) {
           day.credits = reported;
         }
       }
 
       if (!(day.credits > 0)) continue;
-      if (day.onDemandCredits == null) day.onDemandCredits = Number(totals.on_demand_credits) || 0;
+      const attributed = models.reduce((sum, model) => sum + model.credits, 0);
+      const unattributed = day.credits - attributed;
+      if (unattributed > 0.01) {
+        models.push({
+          model: "__unattributed__",
+          speed: "standard",
+          credits: unattributed,
+          turns: Math.max(0, day.turns - models.reduce((sum, model) => sum + model.turns, 0)),
+          tokens: Math.max(
+            0,
+            day.uncached + day.cached + day.output - models.reduce((sum, model) => sum + model.tokens, 0),
+          ),
+        });
+      }
       days.push(day);
     }
 
@@ -905,6 +956,7 @@
     return {
       days,
       unknownModels: [...unknownModels],
+      legacyModels: [...legacyModels],
       unpricedFast: [...unpricedFast],
       fetchedFrom: startKey,
     };
@@ -915,7 +967,6 @@
   function summarize(days) {
     const s = {
       credits: 0,
-      onDemandCredits: 0,
       uncachedCredits: 0,
       cachedCredits: 0,
       outputCredits: 0,
@@ -933,7 +984,6 @@
 
     for (const d of days) {
       s.credits += d.credits;
-      s.onDemandCredits += d.onDemandCredits || 0;
       s.uncachedCredits += d.uncachedCredits;
       s.cachedCredits += d.cachedCredits;
       s.outputCredits += d.outputCredits;
@@ -1016,7 +1066,7 @@
       cards.push({
         label: L.cTopModel,
         value: usd(topModel.credits),
-        sub: `${topModel.name} · ${L.subShare(pct(topModel.credits / s.credits))}`,
+        sub: `${modelName(topModel.name)} · ${L.subShare(pct(topModel.credits / s.credits))}`,
       });
     }
 
@@ -1024,7 +1074,7 @@
       cards.push({
         label: L.cTopTurnModel,
         value: usd(topTurnModel.credits / topTurnModel.turns),
-        sub: topTurnModel.name,
+        sub: modelName(topTurnModel.name),
       });
     }
 
@@ -1050,6 +1100,7 @@
     ent: null,
     days: [],
     unknownModels: [],
+    legacyModels: [],
     unpricedFast: [],
     fetchedFrom: "",
     view: "cycle", // cycle | period
@@ -1060,15 +1111,15 @@
     root: null,
     // Per-subscription usage-window memory (localStorage); null until identity is known.
     memory: null,
-    memoryId: "",
+    restoreTriggerFocus: false,
     // Purchased credit balance + reset-card ledger for the current seat.
     purchased: { balance: 0, hasCredits: false, unlimited: false },
     resetCards: { available: 0, usedInPeriod: 0, listed: 0 },
   };
 
   /*
-   * One browser can hold several logins and several seats. Memory and monthly cost are
-   * bucketed by the seat Codex is actually answering for — never a single global pile.
+   * One browser can hold several logins and several seats. Scoped values use the seat Codex
+   * is answering for; when several matching seats make that unknowable, memory is withheld.
    */
   function identityKey() {
     const email = (state.win?.email || "").trim().toLowerCase() || "unknown";
@@ -1114,16 +1165,14 @@
   }
 
   function loadMemoryBucket() {
-    if (!state.win) {
+    if (!state.win || state.ent?.ambiguous) {
       state.memory = null;
-      state.memoryId = "";
       return null;
     }
     const id = identityKey();
     const store = readMemoryStore();
     const bucket = store[id] && typeof store[id] === "object" ? store[id] : emptyMemoryBucket();
     if (!Array.isArray(bucket.closed)) bucket.closed = [];
-    state.memoryId = id;
     state.memory = bucket;
     return { store, id, bucket };
   }
@@ -1179,17 +1228,15 @@
     store[id] = bucket;
     writeMemoryStore(store);
     state.memory = bucket;
-    state.memoryId = id;
   }
 
   function clearCurrentMemory() {
-    if (!state.win) return;
+    if (!state.win || state.ent?.ambiguous) return;
     const id = identityKey();
     const store = readMemoryStore();
     delete store[id];
     writeMemoryStore(store);
     state.memory = emptyMemoryBucket();
-    state.memoryId = id;
   }
 
   let wasOpen = false;
@@ -1217,10 +1264,12 @@
     );
   }
 
+  const hasRenewalDate = () => Number.isFinite(state.ent?.renewsAt);
+
   // The billing period the subscription is actually in, or the calendar month if unknown.
   function periodRange() {
     const today = dayKey(Date.now());
-    if (!state.ent) {
+    if (!hasRenewalDate()) {
       const first = dayMs(today.slice(0, 8) + "01");
       const date = new Date(first);
       return {
@@ -1265,7 +1314,7 @@
     // Without a renewal date there is no billing period, and counting allowances "per
     // payment" would be a claim about something we cannot see. Same for a placeholder
     // window: its openings would be counted from a boundary that moves on every fetch.
-    if (!state.ent || state.win?.placeholder) return null;
+    if (!hasRenewalDate() || state.win?.placeholder) return null;
 
     const W = state.win ? state.win.windowSec * 1000 : 0;
     if (!W) return null;
@@ -1346,11 +1395,9 @@
     state.days.filter((d) => d.date >= fromKey && d.date <= toKey).reduce((a, d) => a + d.percent, 0) / 100;
 
   /*
-   * Live window size: spend in this usage window ÷ the rate-limit used%. This is what actually
-   * gates you right now. Integer used% and mid-day opens make it noisy early on, so it only
-   * overrides the daily-ratio figure once the window has real usage behind it — and always
-   * wins when the window is exhausted, because "100% used after $50" means one allowance is
-   * $50, not whatever older days still imply.
+   * Live window size: spend in this usage window ÷ the rate-limit used%. Integer used% and
+   * mid-day openings make this the noisier source, so it is a fallback and a cross-check for
+   * the daily-ratio measurement rather than a silent override.
    */
   function windowAllowance(spendCredits, usedPercent, limitReached) {
     if (!(spendCredits > 0) || !state.win?.inferable) return null;
@@ -1359,6 +1406,35 @@
     }
     if (usedPercent >= 20) return spendCredits / (usedPercent / 100);
     return null;
+  }
+
+  /*
+   * One authority for allowance value and provenance. Consumers never infer provenance from
+   * whether a number happens to exist: the daily ratio is measured, the window division is
+   * inferred, and a material disagreement remains attached to the chosen value.
+   */
+  function allowanceReading(spendCredits, usedPercent, limitReached) {
+    const daily = measuredAllowance();
+    const window = windowAllowance(spendCredits, usedPercent, limitReached);
+
+    if (daily) {
+      const rel = window > 0 ? Math.abs(daily.credits - window) / Math.max(daily.credits, window) : 0;
+      return {
+        ...daily,
+        source: "daily-ratio",
+        conflict: rel > 0.05 ? { daily: daily.credits, window } : null,
+      };
+    }
+
+    let credits = window;
+    if (!(credits > 0) && state.win?.inferable) {
+      if (usedPercent > 0 && spendCredits > 0) credits = spendCredits / (usedPercent / 100);
+      else if (limitReached && spendCredits > 0) credits = spendCredits;
+    }
+
+    return credits > 0
+      ? { credits, source: "window-percent", samples: 0, dropped: 0, conflict: null }
+      : null;
   }
 
   function cycleReading() {
@@ -1374,26 +1450,8 @@
      * than a couple of days would be divided into a day's spend and produce a ceiling several
      * times too large. Better to show nothing than a confidently wrong number.
      */
-    const measured = measuredAllowance();
-    let ceiling = measured ? measured.credits : null;
-
-    const fromWindow = windowAllowance(s.credits, used, state.win.limitReached);
-    if (fromWindow > 0) {
-      if (!ceiling) {
-        ceiling = fromWindow;
-      } else {
-        const rel = Math.abs(ceiling - fromWindow) / Math.max(ceiling, fromWindow);
-        // The live rate-limit window is ground truth for *this* allowance. Daily ratios can
-        // lag a change or still reflect a larger grant from earlier in the billing period.
-        if (rel > 0.05) ceiling = fromWindow;
-      }
-    } else if (!ceiling && state.win.inferable) {
-      // Sparse early window: only the weak fallback remains.
-      if (used > 0 && s.credits > 0) ceiling = s.credits / (used / 100);
-      else if (state.win.limitReached && s.credits > 0) ceiling = s.credits;
-    }
-
-    return { days, s, used, ceiling, measured };
+    const allowance = allowanceReading(s.credits, used, state.win.limitReached);
+    return { days, s, used, ceiling: allowance?.credits ?? null, allowance };
   }
 
   const spendInDays = (fromKey, toKey) =>
@@ -1506,7 +1564,7 @@
     // silently become a cap on the total.
     let openings = 0;
     const future = [];
-    if (state.ent && state.ent.renewsAt > state.win.resetAt) {
+    if (hasRenewalDate() && state.ent.renewsAt > state.win.resetAt) {
       openings = Math.ceil((state.ent.renewsAt - state.win.resetAt) / W);
       for (let i = 0; i < Math.min(openings, 10); i++) {
         const start = state.win.resetAt + i * W;
@@ -1515,14 +1573,13 @@
       }
     }
 
-    const trusted = past.filter((p) => p.covered && p.spend > 0);
+    const trusted = past.filter((p) => p.covered);
     const lastFull = trusted.length ? trusted[trusted.length - 1] : null;
 
     return {
       past,
       future,
       openings,
-      hiddenOpenings: Math.max(0, openings - future.length),
       lastFull,
       current: { start: state.win.startAt, end: state.win.resetAt, spend: r.s.credits, ceiling: r.ceiling },
     };
@@ -1536,7 +1593,7 @@
   function projectToRenewal() {
     const seg = cycleSegments();
     const r = cycleReading();
-    if (!seg || !state.ent || !r) return null;
+    if (!seg || !hasRenewalDate() || !r) return null;
 
     const now = Date.now();
     if (state.ent.renewsAt <= now) return null;
@@ -1563,7 +1620,8 @@
     const lastMem = state.memory?.closed?.length
       ? state.memory.closed[state.memory.closed.length - 1]
       : null;
-    const basis = lastMem?.spend > 0
+    const hasRememberedBasis = !!lastMem && Number.isFinite(lastMem.spend) && lastMem.spend >= 0;
+    const basis = hasRememberedBasis
       ? lastMem.spend
       : seg.lastFull
         ? seg.lastFull.spend
@@ -1587,7 +1645,7 @@
       allowance: windowLeft + creditLeft,
       expected: restOfThisCycle + usableTime * basis + creditLeft,
       basis,
-      basisIsLastFull: !!(lastMem?.spend > 0 || seg.lastFull),
+      basisIsLastFull: hasRememberedBasis || !!seg.lastFull,
       basisEnd,
     };
   }
@@ -1879,6 +1937,7 @@
     const r = cycleReading();
     const win = state.win;
     const now = Date.now();
+    const allowanceMeasured = r.allowance?.source === "daily-ratio";
 
     const ratio = r.ceiling ? Math.min(1, r.s.credits / r.ceiling) : 0;
     const elapsedDays = Math.max(0.5, (now - win.startAt) / DAY_MS);
@@ -1906,9 +1965,9 @@
              dashed amber only where it is still divided out of the window percentage. */
           r.ceiling
             ? `<div class="right">
-                 <div class="eyebrow ${r.measured ? "" : "is-inferred"}">${esc(r.measured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
-                 <div class="amount small ${r.measured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
-                 ${r.measured ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.measured.samples))}</div>` : ""}
+                 <div class="eyebrow ${allowanceMeasured ? "" : "is-inferred"}">${esc(allowanceMeasured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
+                 <div class="amount small ${allowanceMeasured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
+                 ${allowanceMeasured ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.allowance.samples))}</div>` : ""}
                </div>`
             : ""
         }
@@ -1916,7 +1975,11 @@
 
       <div class="gauge">
         <div class="track ${r.ceiling ? "" : "blank"}" role="img"
-             aria-label="${esc(r.ceiling ? L.gaugeAria(usd(r.s.credits), usd(r.ceiling)) : L.noCeiling(Math.round(r.used)))}">
+             aria-label="${esc(
+               r.ceiling
+                 ? L.gaugeAria(usd(r.s.credits), usd(r.ceiling), allowanceMeasured)
+                 : L.noCeiling(Math.round(r.used)),
+             )}">
           <div class="fill ${ratio > 0.8 ? "hot" : ""}" style="width:${r.ceiling ? (ratio * 100).toFixed(1) : 0}%"></div>
         </div>
         <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span></div>
@@ -2166,6 +2229,22 @@
       if (row.end < p.startMs || row.start > Math.max(p.endMs, Date.now())) return;
       rows.push(row);
     };
+    const pushCurrent = () => {
+      if (!state.win || !r) return;
+      const spansStart = state.win.startAt < p.startMs;
+      const start = Math.max(state.win.startAt, p.startMs);
+      const end = Math.min(state.win.resetAt, p.endMs);
+      const through = Math.min(Date.now(), end);
+      push({
+        start,
+        origStart: state.win.startAt,
+        end,
+        spend: spansStart ? spendInDays(p.from, dayKey(through)) : r.s.credits,
+        ceiling,
+        kind: "now",
+        spansStart,
+      });
+    };
 
     for (const c of state.memory?.closed || []) {
       // A remembered window that spans the period start carries last period's spend in its
@@ -2221,13 +2300,7 @@
         });
       }
       if (state.win) {
-        push({
-          start: state.win.startAt,
-          end: state.win.resetAt,
-          spend: r?.s?.credits || 0,
-          ceiling,
-          kind: "now",
-        });
+        pushCurrent();
       }
       for (const f of seg.future) {
         push({
@@ -2240,13 +2313,7 @@
         });
       }
     } else if (state.win && r) {
-      push({
-        start: state.win.startAt,
-        end: state.win.resetAt,
-        spend: r.s.credits,
-        ceiling,
-        kind: "now",
-      });
+      pushCurrent();
     }
 
     rows.sort((a, b) => a.start - b.start);
@@ -2265,8 +2332,10 @@
     return { leftWindow, natural, cards, bank, credits, total, proj, reading: r };
   }
 
-  function periodSummaryCardsHtml(spendCredits, ceiling, leftTotal) {
+  function periodSummaryCardsHtml(spendCredits, allowance, leftTotal) {
     const L = t();
+    const ceiling = allowance?.credits;
+    const measured = allowance?.source === "daily-ratio";
     return `
       <div class="summary-cards">
         <div class="summary-card primary">
@@ -2274,8 +2343,8 @@
           <div class="amount">${usd(spendCredits)}</div>
         </div>
         <div class="summary-card">
-          <div class="eyebrow ${ceiling ? "" : "is-inferred"}">${esc(ceiling ? L.measured : L.inferred)} · ${esc(L.periodCardOne)}</div>
-          <div class="amount small ${ceiling ? "" : "is-inferred"}">${ceiling ? usd(ceiling) : "—"}</div>
+          <div class="eyebrow ${measured ? "" : "is-inferred"}">${esc(measured ? L.measured : L.inferred)} · ${esc(L.periodCardOne)}</div>
+          <div class="amount small ${measured ? "" : "is-inferred"}">${ceiling ? usd(ceiling) : "—"}</div>
           <div class="hint">${esc(L.periodCardOneSub)}</div>
         </div>
         <div class="summary-card infer">
@@ -2286,7 +2355,7 @@
       </div>`;
   }
 
-  function remainingStackHtml(parts, ceiling) {
+  function remainingStackHtml(parts) {
     const L = t();
     const segs = [
       [parts.leftWindow, "window", L.remWindow],
@@ -2296,10 +2365,8 @@
     ].filter(([v]) => v > 0);
     if (!segs.length && !state.purchased?.unlimited) return "";
 
-    const total = Math.max(parts.total, 1);
     const bars = segs
       .map(([v, cls]) => {
-        const pctW = Math.max(3, (v / total) * 100);
         return `<div class="stack-seg ${cls}" style="flex:${v}" title="${esc(usd(v))}"></div>`;
       })
       .join("");
@@ -2341,14 +2408,16 @@
     );
     if (!show.length) return "";
 
-    const kindLabel = (k) =>
-      k === "now"
-        ? L.timelineNow
-        : k === "ahead"
+    const kindLabel = (row) =>
+      row.kind === "now"
+        ? row.spansStart
+          ? `${L.timelineNow} · ${L.timelineSpill}`
+          : L.timelineNow
+        : row.kind === "ahead"
           ? L.timelineAhead
-          : k === "remembered"
+          : row.kind === "remembered"
             ? L.timelineRemembered
-            : k === "spill"
+            : row.kind === "spill"
               ? L.timelineSpill
               : L.timelineInferred;
 
@@ -2374,7 +2443,7 @@
                 : "—";
         return `<tr class="cyc-${r.kind === "ahead" ? "ahead" : r.kind === "now" ? "now" : "past"}">
           <td>${esc(when)}</td>
-          <td class="cyc-note">${esc(kindLabel(r.kind))}</td>
+          <td class="cyc-note">${esc(kindLabel(r))}</td>
           <td class="n strong">${spend}</td>
           <td class="n">${ceil}</td>
         </tr>`;
@@ -2468,7 +2537,13 @@
         const isNow = r.kind === "now";
         const fill = isNow ? "var(--measured)" : "var(--measured-soft)";
         const tip = [
-          isNow ? L.timelineNow : r.kind === "spill" ? L.timelineSpill : L.timelineInferred,
+          isNow
+            ? r.spansStart
+              ? `${L.timelineNow} · ${L.timelineSpill}`
+              : L.timelineNow
+            : r.kind === "spill"
+              ? L.timelineSpill
+              : L.timelineInferred,
           `${shortDate(dayKey(r.start))} → ${shortDate(dayKey(r.end))}`,
           usd(value),
         ].join(" · ");
@@ -2579,7 +2654,7 @@
 
   function modelChartHtml(s) {
     const L = t();
-    const rows = [...s.models.values()].sort((a, b) => b.credits - a.credits);
+    const rows = [...s.models.values()].filter((m) => m.credits > 0).sort((a, b) => b.credits - a.credits);
     const width = 640;
     const height = Math.max(72, rows.length * 30 + 18);
     const labelWidth = 172;
@@ -2590,8 +2665,9 @@
         const y = 18 + i * 30;
         const w = (m.credits / max) * barWidth;
         const perTurn = m.turns ? usd(m.credits / m.turns) : "—";
-        return `<text class="label-strong" x="0" y="${y + 12}">${esc(m.name)}</text>
-          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${m.name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
+        const name = modelName(m.name);
+        return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
+          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
           <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(m.credits))}</text>
           <text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>`;
       })
@@ -2651,8 +2727,8 @@
     ].filter(Boolean);
 
     return `
-      <div class="section">${periodSummaryCardsHtml(s.credits, ceiling, leftTotal)}</div>
-      ${remainingStackHtml(parts, ceiling)}
+      <div class="section">${periodSummaryCardsHtml(s.credits, reading?.allowance, leftTotal)}</div>
+      ${remainingStackHtml(parts)}
       ${
         spentRowsHaveData(winInfo) || projection
           ? periodCompositeChartHtml(winInfo, projection)
@@ -2737,7 +2813,7 @@
 
   function modelTableHtml(s) {
     const L = t();
-    const rows = [...s.models.values()].sort((a, b) => b.credits - a.credits);
+    const rows = [...s.models.values()].filter((m) => m.credits > 0).sort((a, b) => b.credits - a.credits);
     return `
       <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.byModel)}"><table>
         <thead><tr>
@@ -2747,7 +2823,7 @@
         <tbody>${rows
           .map(
             (m) => `<tr>
-              <td>${esc(m.name)}</td>
+              <td>${esc(modelName(m.name))}</td>
               <td class="n strong">${usd(m.credits)}</td>
               <td class="n">${pct(m.credits / (s.credits || 1))}</td>
               <td class="n">${m.turns ? esc(turnCount(m.turns)) : "—"}</td>
@@ -2763,24 +2839,31 @@
   function notesHtml(days) {
     const L = t();
     const win = state.win;
+    const reading = cycleReading();
+    const allowance = reading?.allowance;
     const first = days[0];
     // Any opening that is not exactly midnight UTC shares its day with the window before it.
     const opensMidDay = win && win.startAt % DAY_MS !== 0;
     const overlap = state.view === "cycle" && opensMidDay && first && first.date === dayKey(win.startAt);
 
     const items = [
-      [L.n1, false],
+      [L.n1(RATE_CARD_VERIFIED), false],
       [L.n2(USD_PER_CREDIT), false],
-      ...(state.ent?.liveSubscriptions > 1 ? [[L.twoSubscriptions(state.ent.liveSubscriptions, win?.planType || "?"), true]] : []),
+      ...(state.ent?.ambiguous
+        ? [[L.ambiguousSubscription(state.ent.liveSubscriptions, state.ent.structure), true]]
+        : state.ent?.liveSubscriptions > 1
+          ? [[L.twoSubscriptions(state.ent.liveSubscriptions, win?.planType || "?"), true]]
+          : []),
       ...(win?.placeholder ? [[L.placeholderWindow, true]] : []),
       ...(win && !win.placeholder && !win.resetBank ? [[L.bankEmpty, false]] : []),
       ...(days.some((d) => d.pricedAtTopRate) ? [[L.topRateWarning, true]] : []),
-      ...(cycleReading()?.measured?.dropped ? [[L.allowanceChanged(cycleReading().measured.dropped), true]] : []),
-      ...(cycleReading()?.measured
-        ? [[L.allowanceNote(cycleReading().measured.samples), false]]
+      ...(allowance?.dropped ? [[L.allowanceChanged(allowance.dropped), true]] : []),
+      ...(allowance?.source === "daily-ratio"
+        ? [[L.allowanceNote(allowance.samples), false]]
         : win && !win.inferable
           ? [[L.n11, true]]
           : [[L.n3, false]]),
+      ...(allowance?.conflict ? [[L.allowanceConflict(usd(allowance.conflict.daily), usd(allowance.conflict.window)), true]] : []),
       ...(overlap ? [[L.n4(clock(win.startAt), first.date, usd(first.credits)), true]] : []),
       ...(days.some((d) => d.models.some((m) => m.speed && m.speed !== "standard"))
         ? [[L.nTurnSplit, false]]
@@ -2789,6 +2872,7 @@
       [L.n6, false],
       [L.n8, false],
       [L.n9, false],
+      ...(state.legacyModels.length ? [[L.nLegacy(state.legacyModels.join(", ")), true]] : []),
       ...(state.unpricedFast.length ? [[L.n10(state.unpricedFast.join(", ")), true]] : []),
       ...(state.unknownModels.length ? [[L.n7(state.unknownModels.join(", ")), true]] : []),
     ];
@@ -2864,11 +2948,29 @@
     `;
   }
 
+  function focusedControlSelector(element) {
+    if (!element) return "";
+    if (element.classList?.contains("panel")) return ".panel";
+    if (element.classList?.contains("cost-input")) return ".cost-input";
+    if (element.dataset?.view) return `[data-view="${element.dataset.view}"]`;
+    if (element.dataset?.lang) return `[data-lang="${element.dataset.lang}"]`;
+    if (element.dataset?.act) return `[data-act="${element.dataset.act}"]`;
+    return "";
+  }
+
+  function closePanel() {
+    state.open = false;
+    state.restoreTriggerFocus = true;
+    render();
+  }
+
   function render() {
     const root = state.root;
     if (!root) return;
     const L = t();
-    const periodLabel = state.ent ? L.period : L.calendarMonth;
+    const periodLabel = hasRenewalDate() ? L.period : L.calendarMonth;
+    const refocus = state.open ? focusedControlSelector(root.activeElement) : "";
+    const opening = state.open && !wasOpen;
 
     root.innerHTML = `
       <style>${CSS}</style>
@@ -2906,6 +3008,7 @@
     // Opening the panel is what triggers the first and only fetch.
     root.querySelector(".trigger").onclick = () => {
       state.open = true;
+      state.restoreTriggerFocus = false;
       if (!state.loaded && !state.loading) load();
       else render();
     };
@@ -2916,7 +3019,10 @@
      * dialog root every time they switch view or language.
      */
     const panel = root.querySelector(".panel");
-    if (panel && state.open && !wasOpen) panel.focus();
+    if (state.restoreTriggerFocus) root.querySelector(".trigger")?.focus();
+    else if (refocus) root.querySelector(refocus)?.focus();
+    else if (panel && opening) panel.focus();
+    state.restoreTriggerFocus = false;
     wasOpen = state.open;
 
     root.querySelectorAll("[data-view]").forEach((b) => {
@@ -2950,11 +3056,7 @@
       };
 
     const close = root.querySelector('[data-act="close"]');
-    if (close)
-      close.onclick = () => {
-        state.open = false;
-        render();
-      };
+    if (close) close.onclick = closePanel;
 
     const reload = root.querySelector('[data-act="reload"]');
     if (reload)
@@ -2965,10 +3067,7 @@
     const scrim = root.querySelector(".scrim");
     if (scrim)
       scrim.onclick = (e) => {
-        if (e.target === scrim) {
-          state.open = false;
-          render();
-        }
+        if (e.target === scrim) closePanel();
       };
   }
 
@@ -3027,6 +3126,7 @@
       const data = await fetchAll(state.token, from, today);
       state.days = data.days;
       state.unknownModels = data.unknownModels;
+      state.legacyModels = data.legacyModels;
       state.unpricedFast = data.unpricedFast;
       state.fetchedFrom = data.fetchedFrom;
       state.loaded = true;
@@ -3047,10 +3147,7 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state.open) {
-      state.open = false;
-      render();
-    }
+    if (e.key === "Escape" && state.open) closePanel();
   });
 
   mount();
