@@ -45,8 +45,10 @@ the real script would never have fetched.</p>
       panel must name which subscription its numbers belong to.</li>
   <li><a href="#sameworkspaces">#sameworkspaces</a> — two active workspace subscriptions cannot
       be matched to the Codex seat. Renewal-dependent figures must be withheld.</li>
+  <li><a href="#samepersonals">#samepersonals</a> — the real Plus-account ambiguity: choose the
+      subscription renewing 08/18, then fetch and total its 07/18 → 08/18 billing period.</li>
   <li><a href="#noent">#noent</a> — <code>accounts/check</code> fails, so there is no renewal date.
-      Must fall back to the calendar month and drop every billing-period claim.</li>
+      Must withhold the subscription view rather than substitute a calendar month.</li>
   <li><a href="#currentspill">#currentspill</a> — the current usage window starts before the
       billing period. Its table row and chart bar must be clipped so their measured total equals
       the $149.90 billing-period headline.</li>
@@ -84,6 +86,9 @@ console.error = (...args) => {
 if (PARAMS.has("assert")) {
   localStorage.removeItem("hmig-cycle-memory");
   localStorage.removeItem("hmig-monthly-cost");
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("hmig-subscription-choice::")) localStorage.removeItem(key);
+  }
   localStorage.setItem("hmig-lang", "en");
 }
 
@@ -309,6 +314,15 @@ if (MODE === "multi") {
   USED_PERCENT = 40;
   RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
   DAYS = [{ at: NOON - 2 * DAY, k: 0.4, turns: 12, threads: 3 }];
+} else if (MODE === "samepersonals") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
+  USED_PERCENT = 40;
+  RENEWS_AT = "2026-08-18T12:00:00.000Z";
+  DAYS = [
+    { at: Date.parse("2026-07-20T12:00:00.000Z"), k: 0.4, turns: 12, threads: 3 },
+    { at: Date.parse("2026-08-08T12:00:00.000Z"), k: 0.4, turns: 12, threads: 3 },
+  ];
 } else if (MODE === "currentspill") {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor((NOW - 15 * DAY) / 1000);
@@ -370,7 +384,7 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = ["personal", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict"].includes(MODE);
+const METERED = ["personal", "samepersonals", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict"].includes(MODE);
 const DAY_CREDITS = METERED
   ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * (d.big ? 2 : 1) * d.k * 0.5 * 10) / 10]))
   : {};
@@ -414,7 +428,7 @@ const RESET_ROWS = MODE === "unusedcard"
   : [];
 
 const USAGE = {
-  plan_type: ["personal", "spill", "bank", "unusedcard", "changed", "conflict"].includes(MODE) ? "plus" : "team",
+  plan_type: ["personal", "samepersonals", "spill", "bank", "unusedcard", "changed", "conflict"].includes(MODE) ? "plus" : "team",
   // Per-scenario identity: cycle memory is bucketed by email|account|plan, and a shared
   // address would let one scenario's remembered windows leak into the next one's tables.
   email: `someone+${MODE}@example.com`,
@@ -440,6 +454,21 @@ const SECOND_ACCOUNT = MODE === "twosubs"
         renews_at: new Date(NOW + 21 * DAY).toISOString(), cancels_at: null, billing_period: "monthly" } } }
   : {};
 
+const PERSONAL_ACCOUNTS = MODE === "samepersonals"
+  ? {
+      "acct-personal-a": { account: { account_id: "acct-personal-a", structure: "personal" }, entitlement: {
+        subscription_id: "personal-a", has_active_subscription: true, subscription_plan: "chatgptplusplan",
+        expires_at: RENEWS_AT, renews_at: RENEWS_AT, cancels_at: null,
+        billing_period: "monthly", billing_currency: "USD",
+      }},
+      "acct-personal-b": { account: { account_id: "acct-personal-b", structure: "personal" }, entitlement: {
+        subscription_id: "personal-b", has_active_subscription: true, subscription_plan: "chatgptplusplan",
+        expires_at: "2026-08-25T12:00:00.000Z", renews_at: "2026-08-25T12:00:00.000Z", cancels_at: null,
+        billing_period: "monthly", billing_currency: "USD",
+      }},
+    }
+  : {};
+
 const WORKSPACE_ACCOUNTS = MODE === "sameworkspaces"
   ? {
       "acct-workspace-a": { account: { account_id: "acct-workspace-a", structure: "workspace" }, entitlement: {
@@ -459,7 +488,7 @@ const WORKSPACE_ACCOUNTS = MODE === "sameworkspaces"
       billing_period: "monthly", billing_currency: "GBP",
     }}};
 
-const CHECK = { accounts: { ...SECOND_ACCOUNT, ...WORKSPACE_ACCOUNTS } };
+const CHECK = { accounts: { ...SECOND_ACCOUNT, ...PERSONAL_ACCOUNTS, ...WORKSPACE_ACCOUNTS } };
 
 /* ── stub ──────────────────────────────────────────────────────────────── */
 // The real endpoints honour start_date / end_date, and end_date is exclusive. A stub that
@@ -484,7 +513,7 @@ window.fetch = (url) => {
   window.__calls.push(u.split("?")[0]);
   if (u.includes("daily-workspace-user-token-usage-breakdown")) {
     // Personal plans have no workspace; this endpoint answers 400 and everything must still work.
-    if (MODE === "personal" || MODE === "spill") return Promise.resolve(new Response('{"detail":"No active workspace found for the current account."}', { status: 400 }));
+    if (MODE === "personal" || MODE === "samepersonals" || MODE === "spill") return Promise.resolve(new Response('{"detail":"No active workspace found for the current account."}', { status: 400 }));
     return reply(clip(BREAKDOWN, u));
   }
   if (u.includes("daily-workspace-usage-counts")) return reply(clip(COUNTS, u));
@@ -524,7 +553,7 @@ if (MODE === "zerobasis") {
 const ALL_MODES = [
   "default", "multi", "fresh", "hourly", "fast", "boundary", "personal", "spill",
   "unknownmodel", "mixedunknown", "changed", "conflict", "bank", "unusedcard", "twosubs",
-  "sameworkspaces", "noent", "currentspill", "zerobasis", "rates", "projection",
+  "sameworkspaces", "samepersonals", "noent", "currentspill", "zerobasis", "rates", "projection",
 ];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -661,12 +690,40 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "sameworkspaces") {
-      expect("ambiguous renewal falls back to month", root.querySelector('[data-view="period"]')?.innerText === "This month");
+      expect("ambiguous renewal keeps subscription label", root.querySelector('[data-view="period"]')?.innerText === "This subscription");
       root = await chooseView(root, "period");
       text = root.querySelector(".panel")?.innerText || "";
-      expect("ambiguous renewal is explained", /renewal-dependent figures are hidden/i.test(text), text.slice(0, 500));
+      expect("ambiguous renewal asks for a choice", root.querySelectorAll("[data-subscription-choice]").length === 2, text.slice(0, 500));
       const memory = JSON.parse(localStorage.getItem("hmig-cycle-memory") || "{}");
       expect("ambiguous seat does not write per-seat memory", Object.keys(memory).length === 0, JSON.stringify(memory));
+    }
+
+    if (MODE === "samepersonals") {
+      expect("personal ambiguity keeps subscription label", root.querySelector('[data-view="period"]')?.innerText === "This subscription");
+      root = await chooseView(root, "period");
+      text = root.querySelector(".panel")?.innerText || "";
+      const choice = root.querySelector('[data-subscription-choice="acct-personal-a"]');
+      expect("personal ambiguity offers renewal choices", root.querySelectorAll("[data-subscription-choice]").length === 2, text.slice(0, 500));
+      choice?.click();
+      for (let i = 0; i < 100; i++) {
+        root = document.getElementById("how-much-i-get").shadowRoot;
+        if (window.__calls.length >= 14 && !root.querySelector(".trigger.busy")) break;
+        await wait(20);
+      }
+      root = document.getElementById("how-much-i-get").shadowRoot;
+      text = root.querySelector(".panel")?.innerText || "";
+      expect("chosen subscription refetches its period", window.__calls.length === 14, window.__calls.join(", "));
+      expect("chosen subscription spans 07-18 to 08-18", text.includes("07-18 → 08-18"), text.slice(0, 1000));
+      expect("chosen period includes July spend", root.querySelector(".summary-card")?.innerText.includes("$79.83"), root.querySelector(".summary-card")?.innerText || "");
+      expect("choice removes ambiguity prompt", root.querySelectorAll("[data-subscription-choice]").length === 0);
+    }
+
+    if (MODE === "noent") {
+      expect("missing renewal keeps subscription label", root.querySelector('[data-view="period"]')?.innerText === "This subscription");
+      root = await chooseView(root, "period");
+      text = root.querySelector(".panel")?.innerText || "";
+      expect("missing renewal withholds period figures", /no calendar month has been substituted/i.test(text), text.slice(0, 500));
+      expect("missing renewal shows no period summary", root.querySelector(".summary-card") == null);
     }
 
     if (MODE === "zerobasis") {

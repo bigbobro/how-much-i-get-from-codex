@@ -121,7 +121,8 @@ whenever the ground under it gives way:
   visible in an Unattributed row.
 - **Several matching subscriptions.** If two active workspace seats or two active personal
   subscriptions could both own the Codex context, there is no defensible renewal date. The
-  panel falls back to the calendar month and hides renewal-dependent figures.
+  panel asks you to choose the renewal date once; until then it withholds billing-period
+  figures instead of substituting a calendar month.
 
 ### Projections
 
@@ -163,7 +164,9 @@ for whichever context Codex is in, and that is **not always the account the prof
 names** — a `ChatGPT-Account-ID` header does not override it. The masthead therefore carries
 the plan and the account email. One personal plus one workspace subscription can be matched
 by structure; several active subscriptions of the same structure are treated as ambiguous,
-with no per-seat local history written until the seat can be identified.
+with no per-seat local history written until the seat can be identified. When the API leaves
+`account_id` empty, the renewal-date choice is stored locally for that email and plan and can
+be changed from the subscription view.
 
 Every request carries `workspace_user=true`, so the figures cover the current seat only.
 
@@ -213,11 +216,12 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#bank` | reset cards left, counted on top of the windows that roll on their own |
 | `#unusedcard` | a status of `unused` is not mistaken for `used` |
 | `#twosubs` | one login, two subscriptions — the panel must name which one it reports |
-| `#sameworkspaces` | two matching workspace subscriptions — calendar-month fallback, no renewal projection, no per-seat memory write |
+| `#sameworkspaces` | two matching workspace subscriptions — asks for the renewal date, no per-seat memory write before selection |
+| `#samepersonals` | two matching personal subscriptions — choosing 08/18 refetches and totals the real 07/18 → 08/18 period |
 | `#hourly` | 5-hour window — refuses to infer, and says why |
 | `#fresh` | placeholder window |
 | `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
-| `#noent` | no renewal date — falls back to the calendar month |
+| `#noent` | no renewal date — withholds the subscription view rather than substituting a calendar month |
 | `#zerobasis` | the latest completed zero-spend window remains a valid pace basis |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
 | `#projection` | placeholder window keeps measured spend and calendar-day average, but no uncapped projection |

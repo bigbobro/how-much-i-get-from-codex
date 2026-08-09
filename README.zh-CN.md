@@ -86,7 +86,7 @@ Fast mode 另算当前公布的倍率——GPT-5.6 和 5.5 是 **2.5×**，GPT-5
 - **额度中途变过。** 这时候「N 个窗口 × 今天的额度」会高估这笔订阅费买到的量——翻倍的情况下虚高 43%。份数照给，乘出来的那个数不给。
 - **Fast mode 没有公布倍率。** 按标准价计并标注偏低，而不是把邻近模型的倍率安到它头上。
 - **rate card 里没有的模型。** token 不计价；接口报出的 credits 差额留在「未归因」里。
-- **同结构订阅不止一份。** 两个 workspace seat 或两份 personal 订阅都可能是当前 Codex 上下文时，无法证明哪个续费日才对。面板退回自然月，并隐藏依赖续费日的数字。
+- **同结构订阅不止一份。** 两个 workspace seat 或两份 personal 订阅都可能是当前 Codex 上下文时，无法证明哪个续费日才对。面板让你选一次续费日；选定前不给账期数字，也不会拿自然月顶上。
 
 ### 前瞻
 
@@ -113,7 +113,7 @@ Fast mode 另算当前公布的倍率——GPT-5.6 和 5.5 是 **2.5×**，GPT-5
 
 ### 你看的是哪份订阅
 
-一个登录可以同时挂着 personal 的 Plus 和 workspace 的席位。Codex 的接口回答的是 Codex 自己所处的上下文，**它跟档案菜单里显示的账号常常不是同一个**——加 `ChatGPT-Account-ID` 头也覆盖不掉。所以面板抬头会写明套餐和账号邮箱。personal + workspace 可以按结构区分；同一种结构下有多份有效订阅时，面板会判为歧义，在能确定 seat 之前也不会写入按 seat 分桶的本地历史。
+一个登录可以同时挂着 personal 的 Plus 和 workspace 的席位。Codex 的接口回答的是 Codex 自己所处的上下文，**它跟档案菜单里显示的账号常常不是同一个**——加 `ChatGPT-Account-ID` 头也覆盖不掉。所以面板抬头会写明套餐和账号邮箱。personal + workspace 可以按结构区分；同一种结构下有多份有效订阅时，面板会判为歧义，在能确定 seat 之前也不会写入按 seat 分桶的本地历史。如果接口把 `account_id` 留空，续费日选择会按邮箱和套餐存在本浏览器里，也能在订阅视图里更改。
 
 所有请求都带 `workspace_user=true`，数字只覆盖当前 seat。
 
@@ -158,11 +158,12 @@ python3 -m http.server 8731
 | `#bank` | 还剩重置券，要加在自然滚动的窗口之上 |
 | `#unusedcard` | 状态 `unused` 不能被误判成 `used` |
 | `#twosubs` | 一个登录两份订阅——面板必须写明报的是哪一份 |
-| `#sameworkspaces` | 两份同结构 workspace 订阅——退回自然月、不做续费前瞻、不写按 seat 分桶的历史 |
+| `#sameworkspaces` | 两份同结构 workspace 订阅——先选续费日，选定前不写按 seat 分桶的历史 |
+| `#samepersonals` | 两份同结构 personal 订阅——选 08/18 后重新拉取并统计真实的 07/18 → 08/18 账期 |
 | `#hourly` | 5 小时窗口——拒绝推算并说明原因 |
 | `#fresh` | 占位符窗口 |
 | `#fast` | 标准 / fast 的 turns 都按花费份额拆；没公布的倍率继续标注 |
-| `#noent` | 拿不到续费日期——退回自然月 |
+| `#noent` | 拿不到续费日期——不给订阅账期数字，也不拿自然月代替 |
 | `#zerobasis` | 最近一个完整窗口花费为 0 时，0 仍是有效节奏基准 |
 | `#rates` | 当前 Terra、Luna、GPT-Image-2 text token rate |
 | `#projection` | 占位符保留实测花费与自然日日均，但不给无上限外推 |

@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      3.0.0
+// @version      3.0.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -93,6 +93,7 @@
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
   const COST_KEY = "hmig-monthly-cost";
+  const SUBSCRIPTION_CHOICE_KEY = "hmig-subscription-choice";
   // Closed usage windows, bucketed per login identity × subscription seat.
   const MEMORY_KEY = "hmig-cycle-memory";
   const MEMORY_KEEP = 8;
@@ -111,7 +112,6 @@
 
       cycle: "This usage window",
       period: "This subscription",
-      calendarMonth: "This month",
 
       spent: "Spent",
       ceiling: "Ceiling",
@@ -120,7 +120,16 @@
       noCeiling: (p) => `${p}% used — not enough yet to infer a ceiling`,
       twoSubscriptions: (n, plan) => `This login holds ${n} active subscriptions. Every figure here belongs to the ${plan} one, whichever the Codex API answers for. That is not always the account the profile menu names.`,
       ambiguousSubscription: (n, structure) =>
-        `This login has ${n} active ${structure} subscriptions, so the Codex seat cannot be matched to one renewal date. This month is shown instead; renewal-dependent figures are hidden.`,
+        `This login has ${n} active ${structure} subscriptions, and the Codex API does not say which one owns this usage. Choose its renewal date before billing-period figures are shown.`,
+      chooseSubscription: "Which subscription owns this Codex usage?",
+      chooseSubscriptionHint:
+        "Match the renewal date shown in your subscription settings. The choice stays only in this browser and can be changed later.",
+      chooseRenewal: (d) => `Renews ${d}`,
+      chosenRenewal: (d) => `Using the subscription that renews ${d}`,
+      changeSubscription: "Change",
+      renewalUnavailable: "Subscription period unavailable",
+      renewalUnavailableHint:
+        "The renewal date could not be read, so no calendar month has been substituted. Reload to try again.",
       measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
       allowanceConflict: (daily, window) =>
         `Daily usage measures this allowance as ${daily}, while the live window percentage implies ${window}. The measured daily value wins; the mismatch is left visible for diagnosis.`,
@@ -225,7 +234,6 @@
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "Measured over the real billing period rather than the calendar month. The allowance resets on its own clock, so only the billing period answers what one payment buys.",
-      monthWhy: "No renewal date available, so this falls back to the calendar month.",
       activeDays: "Days with usage",
       dailyAvg: "Average on those days",
       turnsTotal: (n) => `${n} turns`,
@@ -300,7 +308,6 @@
 
       cycle: "本份用量",
       period: "本期订阅",
-      calendarMonth: "本自然月",
 
       spent: "已花",
       ceiling: "额度",
@@ -309,7 +316,14 @@
       noCeiling: (p) => `已用 ${p}%，还不够反推额度`,
       twoSubscriptions: (n, plan) => `这个登录下有 ${n} 份有效订阅。这里的数字都属于 ${plan} 这一份，也就是 Codex 接口当前回答的那份。它跟档案菜单显示的账号常常不是同一个。`,
       ambiguousSubscription: (n, structure) =>
-        `这个登录下有 ${n} 份有效的${structure === "workspace" ? "工作区" : "个人"}订阅，无法把 Codex seat 唯一对应到一个续费日。这里退回显示本自然月，并隐藏依赖续费日的数字。`,
+        `这个登录下有 ${n} 份有效的${structure === "workspace" ? "工作区" : "个人"}订阅，而 Codex 接口没说这份用量属于哪一个。选定续费日之后，才显示真实账期数字。`,
+      chooseSubscription: "这份 Codex 用量属于哪一份订阅？",
+      chooseSubscriptionHint: "对照订阅设置里的续费日选择。结果只存在这台浏览器里，之后可以更改。",
+      chooseRenewal: (d) => `${d} 续费`,
+      chosenRenewal: (d) => `当前按 ${d} 续费的订阅统计`,
+      changeSubscription: "更改",
+      renewalUnavailable: "暂时无法计算本期订阅",
+      renewalUnavailableHint: "接口没有返回续费日，所以这里不会拿自然月代替。可以重新读取再试。",
       measuredFrom: (n) => `由 ${n} 天用量测出`,
       allowanceConflict: (daily, window) =>
         `每日用量测出的本份额度是 ${daily}，实时窗口百分比反推的是 ${window}。这里采用每日实测值，同时保留差异供排查。`,
@@ -413,7 +427,6 @@
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "按真实账期算，不按自然月。额度按自己的时钟重置，所以要问一次付费买到了什么，只能按账期算。",
-      monthWhy: "拿不到续费日期，退回按自然月统计。",
       activeDays: "有用量的天数",
       dailyAvg: "这些天的日均",
       turnsTotal: (n) => `共 ${n} turns`,
@@ -613,6 +626,7 @@
       resetBank: bank,
       planType: usage.plan_type,
       email: usage.email || "",
+      accountId: usage.account_id || "",
     };
   }
 
@@ -683,17 +697,26 @@
    * wrong renewal date roughly half the time, so match the account the session is actually
    * using: a personal plan for a personal plan_type, a workspace one otherwise.
    */
-  function readEntitlement(check, planType) {
+  function readEntitlement(check, planType, selectedAccountId = "") {
     const wanted = planType === "plus" || planType === "pro" || planType === "free" ? "personal" : "workspace";
 
-    const live = Object.values(check?.accounts || {})
-      .filter((a) => a?.entitlement?.has_active_subscription && a.entitlement.renews_at)
-      .filter((a) => Number.isFinite(Date.parse(a.entitlement.renews_at)));
+    const live = Object.entries(check?.accounts || {})
+      .filter(([, a]) => a?.entitlement?.has_active_subscription && a.entitlement.renews_at)
+      .map(([key, a]) => ({
+        accountId: a.account?.account_id || key,
+        structure: a.account?.structure || "",
+        renewsAt: Date.parse(a.entitlement.renews_at),
+        billingPeriod: a.entitlement.billing_period,
+      }))
+      .filter((a) => Number.isFinite(a.renewsAt));
 
     if (!live.length) return null;
 
-    const matching = live.filter((a) => a.account?.structure === wanted);
-    const pick = matching.length === 1 ? matching[0] : live.length === 1 ? live[0] : null;
+    const matching = live.filter((a) => a.structure === wanted);
+    const candidates = matching.length ? matching : live.length === 1 ? live : [];
+    const selected = candidates.find((a) => a.accountId === selectedAccountId);
+    const samePeriod = new Set(candidates.map((a) => `${a.renewsAt}|${a.billingPeriod || "monthly"}`)).size === 1;
+    const pick = selected || (candidates.length === 1 || samePeriod ? candidates[0] : null);
 
     /*
      * One login can hold both a personal Plus and a workspace seat. The Codex endpoints
@@ -702,25 +725,30 @@
      * Counting the live subscriptions is what lets the panel warn instead of quietly
      * reporting a different subscription than the reader has in mind.
      */
-    const distinct = new Set(live.map((a) => a.account?.account_id).filter(Boolean));
+    const distinct = new Set(live.map((a) => a.accountId).filter(Boolean));
+    const common = {
+      liveSubscriptions: distinct.size || live.length,
+      structure: wanted,
+      candidates,
+      choiceRequired: candidates.length > 1 && !samePeriod,
+    };
 
     if (!pick) {
       return {
+        ...common,
         renewsAt: null,
         billingPeriod: null,
-        liveSubscriptions: distinct.size || live.length,
         accountId: "",
-        structure: wanted,
         ambiguous: true,
       };
     }
 
     return {
-      renewsAt: Date.parse(pick.entitlement.renews_at),
-      billingPeriod: pick.entitlement.billing_period,
-      liveSubscriptions: distinct.size,
-      accountId: pick.account?.account_id || "",
-      structure: pick.account?.structure || "",
+      ...common,
+      renewsAt: pick.renewsAt,
+      billingPeriod: pick.billingPeriod,
+      accountId: pick.accountId,
+      structure: pick.structure,
       ambiguous: false,
     };
   }
@@ -1128,6 +1156,16 @@
     return `${email}|${accountId}|${plan}`;
   }
 
+  function subscriptionChoiceKey() {
+    const email = (state.win?.email || "").trim().toLowerCase() || "unknown";
+    const plan = (state.win?.planType || "unknown").toLowerCase();
+    return `${SUBSCRIPTION_CHOICE_KEY}::${email}|${plan}`;
+  }
+
+  function storedSubscriptionChoice() {
+    return state.win ? localStorage.getItem(subscriptionChoiceKey()) || "" : "";
+  }
+
   function costKeyForIdentity() {
     return state.win ? `${COST_KEY}::${identityKey()}` : COST_KEY;
   }
@@ -1266,7 +1304,8 @@
 
   const hasRenewalDate = () => Number.isFinite(state.ent?.renewsAt);
 
-  // The billing period the subscription is actually in, or the calendar month if unknown.
+  // The real billing period when known. The fallback exists only to bound the initial fetch;
+  // sheetHtml never presents it as a subscription period.
   function periodRange() {
     const today = dayKey(Date.now());
     if (!hasRenewalDate()) {
@@ -1920,6 +1959,26 @@
     .status.bad { color: var(--alarm); text-align: left; white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; }
     .status .hint { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
 
+    .subscription-picker {
+      border: 1px solid color-mix(in srgb, var(--inferred) 38%, var(--rule));
+      border-radius: 8px; background: var(--panel); padding: 16px; margin-bottom: 22px;
+    }
+    .subscription-picker h2 { font-size: 13px; letter-spacing: -.01em; text-transform: none; margin-bottom: 5px; }
+    .subscription-picker p { color: var(--ink-2); font-size: 11.5px; margin: 0; max-width: 70ch; }
+    .subscription-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .subscription-option {
+      font: inherit; min-width: 170px; padding: 9px 11px; text-align: left; cursor: pointer;
+      color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 6px;
+    }
+    .subscription-option:hover { border-color: var(--measured); }
+    .subscription-option:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
+    .subscription-option strong { display: block; font-size: 12px; font-weight: 650; }
+    .subscription-option span { display: block; color: var(--ink-3); font: 10.5px var(--mono); margin-top: 2px; }
+    .subscription-picked {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      color: var(--ink-2); font-size: 11.5px; margin-bottom: 18px;
+    }
+
     @media (max-width: 620px) {
       .amount { font-size: 30px; }
       .sheet { padding: 16px 16px 22px; }
@@ -2053,7 +2112,7 @@
 
   function forecastHtml() {
     const L = t();
-    if (!state.win) return "";
+    if (!state.win || !hasRenewalDate()) return "";
 
     const proj = projectToRenewal();
     const cost = monthlyCost();
@@ -2746,7 +2805,7 @@
         <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
         <span>${esc(L.turnsTotal(int(s.turns)))}</span>
       </div>
-      <div class="why">${esc(p.isBilling ? L.periodWhy : L.monthWhy)}</div>
+      <div class="why">${esc(L.periodWhy)}</div>
     `;
   }
 
@@ -2850,8 +2909,8 @@
       [L.n1(RATE_CARD_VERIFIED), false],
       [L.n2(USD_PER_CREDIT), false],
       ...(state.ent?.ambiguous
-        ? [[L.ambiguousSubscription(state.ent.liveSubscriptions, state.ent.structure), true]]
-        : state.ent?.liveSubscriptions > 1
+        ? [[L.ambiguousSubscription(state.ent.candidates?.length || state.ent.liveSubscriptions, state.ent.structure), true]]
+        : state.ent?.liveSubscriptions > 1 && !state.ent?.choiceRequired
           ? [[L.twoSubscriptions(state.ent.liveSubscriptions, win?.planType || "?"), true]]
           : []),
       ...(win?.placeholder ? [[L.placeholderWindow, true]] : []),
@@ -2909,6 +2968,49 @@
     `;
   }
 
+  function subscriptionChoiceHtml() {
+    const L = t();
+    const candidates = [...(state.ent?.candidates || [])].sort((a, b) => a.renewsAt - b.renewsAt);
+    if (!state.ent?.ambiguous || !candidates.length) return "";
+
+    return `
+      <div class="subscription-picker">
+        <div class="eyebrow is-inferred">${esc(L.period)}</div>
+        <h2>${esc(L.chooseSubscription)}</h2>
+        <p>${esc(L.chooseSubscriptionHint)}</p>
+        <div class="subscription-options" role="group" aria-label="${esc(L.chooseSubscription)}">
+          ${candidates
+            .map((candidate) => {
+              const end = new Date(candidate.renewsAt);
+              const start = rollBack(end, candidate.billingPeriod === "yearly" ? 12 : 1);
+              return `<button type="button" class="subscription-option" data-subscription-choice="${esc(candidate.accountId)}">
+                <strong>${esc(L.chooseRenewal(dateOnly(candidate.renewsAt)))}</strong>
+                <span>${esc(L.periodSpan(dayKey(start.getTime()), dayKey(candidate.renewsAt)))}</span>
+              </button>`;
+            })
+            .join("")}
+        </div>
+      </div>`;
+  }
+
+  function selectedSubscriptionHtml() {
+    const L = t();
+    if (state.ent?.choiceLocked || !state.ent?.choiceRequired) return "";
+    return `<div class="subscription-picked">
+      <span>${esc(L.chosenRenewal(dateOnly(state.ent.renewsAt)))}</span>
+      <button type="button" class="mem-clear" data-act="change-subscription">${esc(L.changeSubscription)}</button>
+    </div>`;
+  }
+
+  function renewalUnavailableHtml() {
+    const L = t();
+    return `<div class="subscription-picker">
+      <div class="eyebrow is-inferred">${esc(L.period)}</div>
+      <h2>${esc(L.renewalUnavailable)}</h2>
+      <p>${esc(L.renewalUnavailableHint)}</p>
+    </div>`;
+  }
+
 
 
 
@@ -2918,16 +3020,26 @@
     if (state.loading) return `<div class="status">${esc(L.loading)}</div>`;
     if (state.error) return `<div class="status bad">${esc(state.error)}</div>`;
 
+    if (state.view === "period" && !hasRenewalDate()) {
+      return `<div class="sheet">${state.ent?.ambiguous ? subscriptionChoiceHtml() : renewalUnavailableHtml()}</div>`;
+    }
+
     const { days, s, from, to } = currentSlice();
+    const subscriptionControl = state.ent?.ambiguous
+      ? subscriptionChoiceHtml()
+      : state.view === "period"
+        ? selectedSubscriptionHtml()
+        : "";
     if (!days.length) {
-      return `<div class="status">${esc(state.view === "cycle" ? L.emptyCycle : L.emptyPeriod)}
-        <div class="hint">${esc(L.emptyHint)}</div></div>`;
+      return `<div class="sheet">${subscriptionControl}<div class="status">${esc(state.view === "cycle" ? L.emptyCycle : L.emptyPeriod)}
+        <div class="hint">${esc(L.emptyHint)}</div></div></div>`;
     }
 
     const forecast = state.view === "cycle" ? forecastHtml() : "";
 
     return `
       <div class="sheet">
+        ${subscriptionControl}
         ${state.view === "cycle" ? gaugeHtml() : periodHeadHtml(s)}
         ${forecast ? `<div class="rule"></div>${forecast}` : ""}
         <div class="rule major"></div>
@@ -2968,7 +3080,6 @@
     const root = state.root;
     if (!root) return;
     const L = t();
-    const periodLabel = hasRenewalDate() ? L.period : L.calendarMonth;
     const refocus = state.open ? focusedControlSelector(root.activeElement) : "";
     const opening = state.open && !wasOpen;
 
@@ -2988,7 +3099,7 @@
                   <div class="controls">
                     <div class="seg">
                       <button data-view="cycle" aria-pressed="${state.view === "cycle"}">${esc(L.cycle)}</button>
-                      <button data-view="period" aria-pressed="${state.view === "period"}">${esc(periodLabel)}</button>
+                      <button data-view="period" aria-pressed="${state.view === "period"}">${esc(L.period)}</button>
                     </div>
                     <div class="seg">
                       <button data-lang="zh" aria-pressed="${lang === "zh"}">中</button>
@@ -3040,6 +3151,13 @@
       };
     });
 
+    root.querySelectorAll("[data-subscription-choice]").forEach((b) => {
+      b.onclick = () => {
+        localStorage.setItem(subscriptionChoiceKey(), b.dataset.subscriptionChoice);
+        if (!state.loading) load();
+      };
+    });
+
     const cost = root.querySelector(".cost-input");
     if (cost)
       cost.onchange = () => {
@@ -3052,6 +3170,21 @@
       clearMem.onclick = () => {
         if (!window.confirm(t().cycleMemClearConfirm)) return;
         clearCurrentMemory();
+        render();
+      };
+
+    const changeSubscription = root.querySelector('[data-act="change-subscription"]');
+    if (changeSubscription)
+      changeSubscription.onclick = () => {
+        localStorage.removeItem(subscriptionChoiceKey());
+        state.ent = {
+          ...state.ent,
+          renewsAt: null,
+          billingPeriod: null,
+          accountId: "",
+          ambiguous: true,
+        };
+        state.memory = null;
         render();
       };
 
@@ -3100,7 +3233,9 @@
       ]);
 
       state.win = readWindow(usage);
-      state.ent = check ? readEntitlement(check, state.win?.planType) : null;
+      const selectedAccountId = state.win?.accountId || storedSubscriptionChoice();
+      state.ent = check ? readEntitlement(check, state.win?.planType, selectedAccountId) : null;
+      if (state.ent) state.ent.choiceLocked = !!state.win?.accountId;
       state.purchased = readPurchasedCredits(usage);
       if (!state.win) throw new Error(t().noWindow);
 
