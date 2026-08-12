@@ -59,6 +59,8 @@ the real script would never have fetched.</p>
   <li><a href="#projection">#projection</a> — a freshly reset placeholder window with five active
       days in the billing period. It must show the measured $494.66 and the $70.67 calendar-day
       average, but no uncapped period projection.</li>
+  <li><a href="#surfaces">#surfaces</a> — one metered day split 50 / 30 / 20 across CLI, VS Code
+      and web. Expect <b>$49.90 / $29.94 / $19.96</b> and a biggest-surface card for CLI.</li>
 </ul>
 <p><small>The harness clock is fixed at 2026-08-10 12:00 UTC. Switching hash needs a reload — the
 scenario is read once at start-up. <a href="?all=1">Run every assertion</a>.</small></p>
@@ -358,6 +360,12 @@ if (MODE === "multi") {
       uncached_text_input_tokens: 1000000, cached_text_input_tokens: 1000000,
       text_output_tokens: 1000000, text_total_tokens: 3000000 },
   ];
+} else if (MODE === "surfaces") {
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
+  USED_PERCENT = 25;
+  RENEWS_AT = new Date(NOW + 20 * DAY).toISOString();
+  DAYS = [{ at: NOON - 1 * DAY, k: 1, turns: 20, threads: 3 }];
 } else if (MODE === "projection") {
   WINDOW_SEC = 2628000;
   WINDOW_START = Math.floor(NOW / 1000);
@@ -384,7 +392,7 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = ["personal", "samepersonals", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict"].includes(MODE);
+const METERED = ["personal", "samepersonals", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict", "surfaces"].includes(MODE);
 const DAY_CREDITS = METERED
   ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * (d.big ? 2 : 1) * d.k * 0.5 * 10) / 10]))
   : {};
@@ -397,7 +405,9 @@ function CREDITS_FOR(date) { return DAY_CREDITS[date] || 0; }
 const PERCENTS = { units: "percent", group_by: "day", data: (METERED ? DAYS : []).map(d => {
   const date = utcDay(d.at);
   const pct = (DAY_CREDITS[date] / DAY_ALLOWANCE[date]) * 100;
-  return { date, product_surface_usage_values: { cli: pct, vscode: 0, web: 0, unknown: 0 },
+  return { date, product_surface_usage_values: MODE === "surfaces"
+    ? { cli: pct * 0.5, vscode: pct * 0.3, web: pct * 0.2, unknown: 0 }
+    : { cli: pct, vscode: 0, web: 0, unknown: 0 },
     models: [{ model: "gpt-5.6-sol", speed: "standard", credits: pct * 0.95 },
              { model: "gpt-5.4-mini", speed: "standard", credits: pct * 0.05 }] };
 })};
@@ -417,6 +427,18 @@ function TOKENS_FOR(date, field) { return DAY_TOKENS[date]?.[field] || 0; }
 const BREAKDOWN = { units: "credits", group_by: "day",
   data: DAYS.map(d => breakdownRow(utcDay(d.at), modelsFor(d))) };
 const COUNTS = { group_by: "day", data: DAYS.map(d => countsRow(utcDay(d.at), d.turns, d.threads)) };
+if (MODE === "surfaces") {
+  for (const row of COUNTS.data) {
+    const turns = row.totals.turns;
+    const cli = Math.round(turns * 0.5);
+    const vscode = Math.round(turns * 0.3);
+    row.clients = [
+      { client_id: "CODEX_CLI", users: 1, threads: 1, turns: cli },
+      { client_id: "CODEX_VSCODE", users: 1, threads: 1, turns: vscode },
+      { client_id: "CODEX_WEB", users: 1, threads: 1, turns: Math.max(0, turns - cli - vscode) },
+    ];
+  }
+}
 const ATTRIBUTION = { group: "workspace", group_by: "day",
   data: DAYS.map(d => ({ date: utcDay(d.at),
     code_attribution: { lines_of_code: { added: Math.round(2400 * d.k), removed: Math.round(600 * d.k) } } })) };
@@ -554,6 +576,7 @@ const ALL_MODES = [
   "default", "multi", "fresh", "hourly", "fast", "boundary", "personal", "spill",
   "unknownmodel", "mixedunknown", "changed", "conflict", "bank", "unusedcard", "twosubs",
   "sameworkspaces", "samepersonals", "noent", "currentspill", "zerobasis", "rates", "projection",
+  "surfaces",
 ];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -597,6 +620,7 @@ async function runScenarioAssertions() {
     if (MODE === "default") {
       expect("default spend", text.includes("$249.83"));
       expect("default ceiling", text.includes("$250.00"));
+      expect("version is visible", /^v\d+\.\d+\.\d+$/.test(root.querySelector(".version")?.textContent || ""));
       expect("cycle source is inferred", root.querySelector(".gauge-head")?.innerText.includes("INFERRED · CEILING"));
       expect("inferred source reaches aria", root.querySelector(".track")?.getAttribute("aria-label")?.includes("an inferred"));
       root = await chooseView(root, "period");
@@ -734,6 +758,15 @@ async function runScenarioAssertions() {
       expect("placeholder keeps measured spend", text.includes("$494.66"));
       expect("calendar-day average remains", text.includes("$70.67"));
       expect("placeholder has no uncapped projection", !text.includes("$2,190.64"));
+    }
+
+    if (MODE === "surfaces") {
+      const titles = [...root.querySelectorAll(".chart svg title")].map((x) => x.textContent);
+      expect("surface total", text.includes("$99.79"));
+      expect("surface cli share", titles.some((x) => x.includes("CLI · $49.90")), titles.join(" | "));
+      expect("surface vscode share", titles.some((x) => x.includes("VS Code · $29.94")), titles.join(" | "));
+      expect("surface web share", titles.some((x) => x.includes("Web · $19.96")), titles.join(" | "));
+      expect("top surface card", text.includes("BIGGEST SURFACE") && text.includes("CLI"), text.slice(0, 1200));
     }
   } catch (error) {
     failures.push(error?.message || String(error));

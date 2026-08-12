@@ -2,14 +2,14 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      3.0.1
+// @version      3.1.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
 // @updateURL    https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
 // @description  Work out the Codex spending ceiling OpenAI never tells you. Exact per-model pricing from the official rate card, the cycle limit inferred from the used percentage, and a projection of what is left before your subscription renews. Reads nothing until you open it.
 // @description:zh-CN 算出 OpenAI 从不告诉你的那个数字。按官方 rate card 逐模型精确计价，用已用百分比反推本周期额度，再推算到订阅续费日之前你还能拿到多少。不点开就不发任何请求。
-// @match        https://chatgpt.com/codex/cloud/settings/analytics*
+// @match        https://chatgpt.com/*
 // @author       bigbobro
 // @run-at       document-idle
 // @grant        none
@@ -89,6 +89,9 @@
 
   // OpenAI has never published this rate. It comes from the credit purchase page.
   const USD_PER_CREDIT = 0.04;
+  // Keep in lockstep with @version. GM_info wins when the host injects it, so the
+  // panel shows the installed copy rather than whatever this source last said.
+  const SCRIPT_VERSION = "3.1.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -201,6 +204,9 @@
       chartDaily: "Spend per day",
       chartDailySub: (r) => `dashed line is ${r} per calendar day`,
       chartModel: "Where the money goes by model",
+      chartSurface: "Where the money goes by surface",
+      chartSurfaceSub: "split by the API's surface shares, not by token count",
+      chartSurfaceSubTurns: "no surface shares from the API — split by each surface's share of turns",
       unattributed: "Unattributed",
       seeNumbers: "See the numbers",
       today: "today",
@@ -244,6 +250,7 @@
       cPriciestDay: "Priciest day",
       cPriciestTurnDay: "Dearest turns",
       cTopModel: "Biggest spender",
+      cTopSurface: "Biggest surface",
       cTopTurnModel: "Dearest per turn",
       cCacheRate: "Cache hit rate",
       cFast: "Fast mode",
@@ -260,6 +267,15 @@
 
       byDay: "By day",
       byModel: "By model",
+      bySurface: "By surface",
+      thSurface: "Surface",
+      surfaceCli: "CLI",
+      surfaceVscode: "VS Code",
+      surfaceWeb: "Web",
+      surfaceGithub: "GitHub",
+      surfaceIos: "iOS",
+      surfaceSlack: "Slack",
+      surfaceUnknown: "Unknown",
 
       thDate: "Date",
       thCost: "Cost",
@@ -292,6 +308,7 @@
       n6: "Scoped to the current seat only. Other people in the workspace are not counted.",
       n7: (m) => `Not in the rate card, so its tokens are not priced: ${m}. Any reported remainder stays visible as Unattributed.`,
       n8: "There is no per-repository breakdown in the API, so spend cannot be split by project.",
+      nSurfaceTurns: "The API did not give per-surface credit shares, so this split uses each surface's share of turns.",
       n9: "Nothing is requested until you open this panel, and nothing runs in the background after you close it.",
 
       reload: "Reload",
@@ -395,6 +412,9 @@
       chartDaily: "每天花了多少",
       chartDailySub: (r) => `虚线是自然日日均 ${r}`,
       chartModel: "钱花在哪个模型上",
+      chartSurface: "钱花在哪个入口上",
+      chartSurfaceSub: "按接口给的入口份额拆，不是按 token 数",
+      chartSurfaceSubTurns: "接口没给入口份额 —— 按各入口的 turns 占比拆",
       unattributed: "未归因",
       seeNumbers: "看具体数字",
       today: "今天",
@@ -437,6 +457,7 @@
       cPriciestDay: "花得最多的一天",
       cPriciestTurnDay: "单 turn 最贵的一天",
       cTopModel: "最烧钱的模型",
+      cTopSurface: "最烧钱的入口",
       cTopTurnModel: "单 turn 最贵的模型",
       cCacheRate: "缓存命中率",
       cFast: "Fast mode",
@@ -453,6 +474,15 @@
 
       byDay: "每日明细",
       byModel: "按模型",
+      bySurface: "按入口",
+      thSurface: "入口",
+      surfaceCli: "CLI",
+      surfaceVscode: "VS Code",
+      surfaceWeb: "网页",
+      surfaceGithub: "GitHub",
+      surfaceIos: "iOS",
+      surfaceSlack: "Slack",
+      surfaceUnknown: "未知",
 
       thDate: "日期",
       thCost: "花费",
@@ -485,6 +515,7 @@
       n6: "只统计当前 seat，不含 workspace 里其他人。",
       n7: (m) => `不在 rate card 里，token 没法计价：${m}。接口报出的剩余花费仍会显示为「未归因」。`,
       n8: "接口没有按仓库拆的维度，所以分不出「哪个项目花了多少」。",
+      nSurfaceTurns: "接口没给按入口的 credit 份额，所以这里按各入口的 turns 占比拆。",
       n9: "不点开就不发任何请求，关掉之后也不会在后台跑。",
 
       reload: "重新读取",
@@ -496,7 +527,96 @@
   const savedLang = localStorage.getItem(LANG_KEY);
   let lang = savedLang || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en");
   const t = () => I18N[lang];
+  const scriptVersion = () => {
+    try {
+      if (typeof GM_info !== "undefined" && GM_info?.script?.version) return GM_info.script.version;
+    } catch {
+      /* GM_info is host-provided; a throw must not blank the panel. */
+    }
+    return SCRIPT_VERSION;
+  };
   const modelName = (name) => (name === "__unattributed__" ? t().unattributed : name);
+  const surfaceName = (key) => {
+    const L = t();
+    const labels = {
+      cli: L.surfaceCli,
+      vscode: L.surfaceVscode,
+      web: L.surfaceWeb,
+      github: L.surfaceGithub,
+      ios: L.surfaceIos,
+      slack: L.surfaceSlack,
+      unknown: L.surfaceUnknown,
+    };
+    return labels[key] || key;
+  };
+
+  function clientToSurface(id) {
+    const raw = String(id || "").trim();
+    const known = {
+      CODEX_CLI: "cli",
+      CODEX_VSCODE: "vscode",
+      CODEX_IDE: "vscode",
+      CODEX_WEB: "web",
+      CODEX_CLOUD: "web",
+      CODEX_GITHUB: "github",
+      CODEX_IOS: "ios",
+      CODEX_APP: "ios",
+      CODEX_SLACK: "slack",
+    };
+    if (known[raw]) return known[raw];
+    const s = raw.toLowerCase();
+    if (s.includes("cli")) return "cli";
+    if (s.includes("vscode") || s.includes("vs_code") || s.includes("vs-code") || s.includes("ide")) return "vscode";
+    if (s.includes("github")) return "github";
+    if (s.includes("slack")) return "slack";
+    if (s.includes("ios") || s.includes("iphone")) return "ios";
+    if (s.includes("web") || s.includes("cloud")) return "web";
+    return s || "unknown";
+  }
+
+  /*
+   * Spend by surface. Credit shares from daily-token-usage-breakdown win when present;
+   * otherwise the day's already-measured credits are split by each client's turn count.
+   * The second path is labelled, because turn share is not a price.
+   */
+  function allocateSurfaces(dayCredits, percentParts, clients) {
+    const turnsBySurface = new Map();
+    for (const client of clients || []) {
+      const key = clientToSurface(client.client_id);
+      turnsBySurface.set(key, (turnsBySurface.get(key) || 0) + (Number(client.turns) || 0));
+    }
+
+    const shares = (percentParts || [])
+      .map(([key, value]) => [clientToSurface(key), Number(value)])
+      .filter(([, value]) => value > 0);
+    const merged = new Map();
+    for (const [key, value] of shares) merged.set(key, (merged.get(key) || 0) + value);
+    const shareTotal = [...merged.values()].reduce((sum, value) => sum + value, 0);
+    if (shareTotal > 0 && dayCredits > 0) {
+      return {
+        source: "percent",
+        rows: [...merged.entries()].map(([key, value]) => ({
+          key,
+          credits: dayCredits * (value / shareTotal),
+          turns: turnsBySurface.get(key) || 0,
+        })),
+      };
+    }
+
+    const turnTotal = [...turnsBySurface.values()].reduce((sum, n) => sum + n, 0);
+    if (turnTotal > 0 && dayCredits > 0) {
+      return {
+        source: "turns",
+        rows: [...turnsBySurface.entries()].map(([key, turns]) => ({
+          key,
+          credits: dayCredits * (turns / turnTotal),
+          turns,
+        })),
+      };
+    }
+
+    return { source: "", rows: [] };
+  }
 
   // ── Formatting ──────────────────────────────────────────────────────────
 
@@ -783,12 +903,20 @@
 
     // Sum of the per-surface shares is the day's consumption as a percentage of one allowance.
     const percentByDate = new Map();
+    const surfaceByDate = new Map();
     for (const row of percents?.data || []) {
-      const pct = Object.values(row.product_surface_usage_values || {}).reduce((a, b) => a + (b || 0), 0);
+      const values = row.product_surface_usage_values || {};
+      const parts = Object.entries(values).filter(([, value]) => Number(value) > 0);
+      const pct = parts.reduce((a, [, b]) => a + (Number(b) || 0), 0);
       if (pct > 0) percentByDate.set(row.date, pct);
+      if (parts.length) surfaceByDate.set(row.date, parts);
     }
     const modelPercentByDate = new Map((percents?.data || []).map((r) => [r.date, r.models || []]));
     const breakdownByDate = new Map((breakdown?.data || []).map((r) => [r.date, r]));
+    const clientsByDate = new Map();
+    for (const row of counts?.data || []) {
+      if (Array.isArray(row.clients) && row.clients.length) clientsByDate.set(row.date, row.clients);
+    }
 
     const activityByDate = new Map();
     for (const row of counts?.data || []) {
@@ -839,6 +967,8 @@
         threads: activity.threads,
         loc: locByDate.get(row.date) || { added: 0, removed: 0 },
         models,
+        surfaces: [],
+        surfaceSource: "",
       };
 
       const priced = [];
@@ -962,6 +1092,9 @@
       }
 
       if (!(day.credits > 0)) continue;
+      const surface = allocateSurfaces(day.credits, surfaceByDate.get(day.date), clientsByDate.get(day.date));
+      day.surfaces = surface.rows;
+      day.surfaceSource = surface.source;
       const attributed = models.reduce((sum, model) => sum + model.credits, 0);
       const unattributed = day.credits - attributed;
       if (unattributed > 0.01) {
@@ -1008,6 +1141,9 @@
       locRemoved: 0,
       days: days.length,
       models: new Map(),
+      surfaces: new Map(),
+      surfaceByPercent: false,
+      surfaceByTurns: false,
     };
 
     for (const d of days) {
@@ -1031,6 +1167,15 @@
         cur.turns += m.turns;
         cur.tokens += m.tokens;
         s.models.set(key, cur);
+      }
+
+      if (d.surfaceSource === "percent") s.surfaceByPercent = true;
+      if (d.surfaceSource === "turns") s.surfaceByTurns = true;
+      for (const surf of d.surfaces || []) {
+        const cur = s.surfaces.get(surf.key) || { name: surf.key, credits: 0, turns: 0 };
+        cur.credits += surf.credits;
+        cur.turns += surf.turns;
+        s.surfaces.set(surf.key, cur);
       }
     }
 
@@ -1095,6 +1240,16 @@
         label: L.cTopModel,
         value: usd(topModel.credits),
         sub: `${modelName(topModel.name)} · ${L.subShare(pct(topModel.credits / s.credits))}`,
+      });
+    }
+
+    const surfaces = [...s.surfaces.values()].sort((a, b) => b.credits - a.credits);
+    const topSurface = surfaces[0];
+    if (topSurface && s.surfaces.size > 1 && topSurface.credits / s.credits < 0.95) {
+      cards.push({
+        label: L.cTopSurface,
+        value: usd(topSurface.credits),
+        sub: `${surfaceName(topSurface.name)} · ${L.subShare(pct(topSurface.credits / s.credits))}`,
       });
     }
 
@@ -1753,6 +1908,7 @@
     .wordmark { font-size: 16px; font-weight: 680; letter-spacing: -.025em; line-height: 1.15; }
     .wordmark em { font-style: normal; color: var(--ink-3); font-weight: 400; }
     .subhead { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-top: 3px; }
+    .version { font-family: var(--mono); letter-spacing: 0; text-transform: none; font-weight: 500; }
     .grow { flex: 1; }
     .controls { display: flex; align-items: center; gap: 6px; }
 
@@ -2741,6 +2897,62 @@
     `;
   }
 
+  function surfaceTableHtml(s) {
+    const L = t();
+    const rows = [...s.surfaces.values()].filter((row) => row.credits > 0).sort((a, b) => b.credits - a.credits);
+    return `
+      <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.bySurface)}"><table>
+        <thead><tr>
+          <th>${esc(L.thSurface)}</th><th class="n">${esc(L.thCost)}</th><th class="n">${esc(L.thShare)}</th>
+          <th class="n">${esc(L.thTurns)}</th><th class="n">${esc(L.thPerTurn)}</th>
+        </tr></thead>
+        <tbody>${rows
+          .map(
+            (row) => `<tr>
+              <td>${esc(surfaceName(row.name))}</td>
+              <td class="n strong">${usd(row.credits)}</td>
+              <td class="n">${pct(row.credits / (s.credits || 1))}</td>
+              <td class="n">${row.turns ? esc(turnCount(row.turns)) : "—"}</td>
+              <td class="n">${row.turns ? usd(row.credits / row.turns) : "—"}</td>
+            </tr>`,
+          )
+          .join("")}</tbody>
+      </table></div>
+    `;
+  }
+
+  function surfaceChartHtml(s) {
+    const L = t();
+    const rows = [...s.surfaces.values()].filter((row) => row.credits > 0).sort((a, b) => b.credits - a.credits);
+    if (!rows.length) return "";
+    const width = 640;
+    const height = Math.max(72, rows.length * 30 + 18);
+    const labelWidth = 172;
+    const barWidth = 255;
+    const max = rows[0].credits || 1;
+    const byTurns = s.surfaceByTurns && !s.surfaceByPercent;
+    const marks = rows
+      .map((row, i) => {
+        const y = 18 + i * 30;
+        const w = (row.credits / max) * barWidth;
+        const name = surfaceName(row.name);
+        const perTurn = row.turns ? usd(row.credits / row.turns) : "";
+        return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
+          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${name} · ${usd(row.credits)}`)}</title></rect>
+          <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(row.credits))}</text>
+          ${perTurn ? `<text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>` : ""}`;
+      })
+      .join("");
+
+    return `
+      <div class="chart">
+        <h2>${esc(L.chartSurface)}<em>${esc(byTurns ? L.chartSurfaceSubTurns : L.chartSurfaceSub)}</em></h2>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartSurface)}">${marks}</svg>
+        <details><summary>${esc(L.seeNumbers)}</summary>${surfaceTableHtml(s)}</details>
+      </div>
+    `;
+  }
+
   function periodHeadHtml(s) {
     const L = t();
     const p = periodRange();
@@ -2930,6 +3142,9 @@
       [L.n5, false],
       [L.n6, false],
       [L.n8, false],
+      ...(days.some((d) => d.surfaceSource === "turns") && !days.some((d) => d.surfaceSource === "percent")
+        ? [[L.nSurfaceTurns, true]]
+        : []),
       [L.n9, false],
       ...(state.legacyModels.length ? [[L.nLegacy(state.legacyModels.join(", ")), true]] : []),
       ...(state.unpricedFast.length ? [[L.n10(state.unpricedFast.join(", ")), true]] : []),
@@ -2958,7 +3173,7 @@
   function triggerHtml() {
     const L = t();
     return `
-      <button class="trigger ${state.loading ? "busy" : ""}" title="${esc(L.openPanel)}">
+      <button class="trigger ${state.loading ? "busy" : ""}" title="${esc(`${L.openPanel} · v${scriptVersion()}`)}">
         <span class="trigger-mark"></span>
         <span class="trigger-body">
           <span class="trigger-kicker">Codex</span>
@@ -3055,6 +3270,7 @@
         ${dailyChartHtml(days, from, to)}
         <div class="rule"></div>
         ${modelChartHtml(s)}
+        ${surfaceChartHtml(s)}
         ${notesHtml(days)}
       </div>
     `;
@@ -3093,7 +3309,7 @@
                 <div class="masthead">
                   <div>
                     <div class="wordmark">${esc(L.title)} <em>${esc(L.from)}</em></div>
-                    <div class="subhead">${state.win ? esc(windowLabel()) : ""}</div>
+                    <div class="subhead">${state.win ? `${esc(windowLabel())} · ` : ""}<span class="version">v${esc(scriptVersion())}</span></div>
                   </div>
                   <span class="grow"></span>
                   <div class="controls">
@@ -3206,6 +3422,51 @@
 
   // ── Boot ────────────────────────────────────────────────────────────────
 
+  /*
+   * @match is chatgpt.com/*, so the script is present during SPA navigation. The trigger
+   * only belongs on the usage / analytics settings pages. smoketest.html is treated as
+   * on-page so the harness can drive the panel without a Codex URL.
+   */
+  function isUsagePage() {
+    const path = location.pathname || "";
+    if (path.includes("smoketest.html")) return true;
+    return /\/codex(?:\/[^/]+)*\/settings\/(analytics|usage)(?:\/|$)/i.test(path);
+  }
+
+  function syncUsagePage() {
+    const on = isUsagePage();
+    if (!on && state.open) {
+      state.open = false;
+      state.restoreTriggerFocus = false;
+      wasOpen = false;
+    }
+    const host = document.getElementById("how-much-i-get");
+    if (host) host.hidden = !on;
+    if (state.root) render();
+  }
+
+  function watchLocation() {
+    const notify = () => queueMicrotask(syncUsagePage);
+    const wrap = (method) => {
+      const orig = history[method];
+      if (typeof orig !== "function" || orig.__hmigWrapped) return;
+      function wrapped(...args) {
+        const ret = orig.apply(this, args);
+        notify();
+        return ret;
+      }
+      wrapped.__hmigWrapped = true;
+      history[method] = wrapped;
+    };
+    wrap("pushState");
+    wrap("replaceState");
+    window.addEventListener("popstate", notify);
+    window.addEventListener("hashchange", notify);
+    if (window.navigation && typeof window.navigation.addEventListener === "function") {
+      window.navigation.addEventListener("navigate", notify);
+    }
+  }
+
   function mount() {
     let host = document.getElementById("how-much-i-get");
     if (!host) {
@@ -3286,5 +3547,6 @@
   });
 
   mount();
-  render();
+  watchLocation();
+  syncUsagePage();
 })();

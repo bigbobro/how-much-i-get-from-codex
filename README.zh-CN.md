@@ -123,13 +123,15 @@ Fast mode 另算当前公布的倍率——GPT-5.6 和 5.5 是 **2.5×**，GPT-5
 
 1. 装 [Tampermonkey](https://www.tampermonkey.net/)
 2. 点 **[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)**，Tampermonkey 会自己接住
-3. 打开 <https://chatgpt.com/codex/cloud/settings/analytics>，点右上角那个标签
+3. 打开 Codex 用量页，点右上角那个标签：
+   <https://chatgpt.com/codex/settings/usage> 或
+   <https://chatgpt.com/codex/cloud/settings/analytics>
 
 更新走 `@updateURL` 指回这个仓库，所以往这里推一次，装过的人都能收到。
 
-界面语言跟随浏览器，也可以在面板里切。
+界面语言跟随浏览器，也可以在面板里切。面板抬头会显示当前装的版本号。
 
-`@match` 是在页面加载时生效的，所以从设置侧边栏点进 Analytics 不会出现触发器——刷新一次就有了。
+脚本跟着 ChatGPT 一起加载，只在用量 / 分析设置页显示触发器。从侧边栏点进去就会出现，不用再刷新。
 
 ---
 
@@ -167,6 +169,7 @@ python3 -m http.server 8731
 | `#zerobasis` | 最近一个完整窗口花费为 0 时，0 仍是有效节奏基准 |
 | `#rates` | 当前 Terra、Luna、GPT-Image-2 text token rate |
 | `#projection` | 占位符保留实测花费与自然日日均，但不给无上限外推 |
+| `#surfaces` | 计量日按 50 / 30 / 20 拆到 CLI、VS Code、网页 |
 
 默认场景仍要复现录下来的 **花费 $249.83 / 额度 $250.00**。整套测试还会统一检查 `NaN` / `undefined`，并确认窗口表合计跟账期大字对得上。
 

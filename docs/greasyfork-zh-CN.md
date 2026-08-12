@@ -32,7 +32,7 @@
 
 ---
 
-支持 Plus、Pro、Business、Team。中英双语。窗口长度从接口读，绝不假设——同样的套餐，有人是周窗口，有人是月窗口。
+支持 Plus、Pro、Business、Team。中英双语。窗口长度从接口读，绝不假设——同样的套餐，有人是周窗口，有人是月窗口。面板会写明当前装的版本号。触发器出现在 Codex 用量页（<https://chatgpt.com/codex/settings/usage> 或 <https://chatgpt.com/codex/cloud/settings/analytics>）。
 
 源码，以及每个数字的完整推导：
 <https://github.com/bigbobro/how-much-i-get-from-codex>

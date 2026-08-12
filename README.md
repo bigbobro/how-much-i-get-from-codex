@@ -176,16 +176,18 @@ Every request carries `workspace_user=true`, so the figures cover the current se
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
 2. Click **[how-much-i-get-from-codex.user.js](https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js)** — Tampermonkey picks it up
-3. Open <https://chatgpt.com/codex/cloud/settings/analytics> and click the label in the
-   top-right corner
+3. Open the Codex usage page and click the label in the top-right corner:
+   <https://chatgpt.com/codex/settings/usage> or
+   <https://chatgpt.com/codex/cloud/settings/analytics>
 
 Updates follow `@updateURL` back to this repository, so a push here reaches anyone who
 installed it.
 
-Interface language follows the browser and can be switched in the panel.
+Interface language follows the browser and can be switched in the panel. The panel masthead
+shows the installed version.
 
-`@match` fires on page load, so arriving at Analytics through the settings sidebar leaves no
-trigger — reload once and it is there.
+The script loads with ChatGPT, then shows the trigger only on the usage / analytics settings
+pages. Arriving there through the sidebar is enough — no extra reload.
 
 ---
 
@@ -225,6 +227,7 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#zerobasis` | the latest completed zero-spend window remains a valid pace basis |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
 | `#projection` | placeholder window keeps measured spend and calendar-day average, but no uncapped projection |
+| `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web |
 
 The default case still reproduces the recorded **$249.83 spent / $250.00 allowance**. The
 suite also checks every panel for `NaN` / `undefined` and verifies that all window-table

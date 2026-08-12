@@ -44,7 +44,10 @@ third party is involved at any point.
 ---
 
 Plus, Pro, Business, Team. English and Chinese. Window length is read from the API and never
-assumed — the same plan ships weekly on one account and monthly on another.
+assumed — the same plan ships weekly on one account and monthly on another. The panel names
+the installed version, and the trigger appears on the Codex usage page
+(<https://chatgpt.com/codex/settings/usage> or
+<https://chatgpt.com/codex/cloud/settings/analytics>).
 
 Source, and the full derivation of every number:
 <https://github.com/bigbobro/how-much-i-get-from-codex>
