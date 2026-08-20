@@ -37,6 +37,10 @@ the real script would never have fetched.</p>
   <li><a href="#conflict">#conflict</a> — the daily allowance says $399.18 while the coarse live
       window percentage says $299.39. The measured daily reading must win and the disagreement
       must be visible.</li>
+  <li><a href="#depleted">#depleted</a> — the limit is reached at <b>$177.63</b> while the daily
+      percentages, divided by a stale denominator, still claim a $399.18 allowance with half of
+      it left (the live 2026-08 monthly→weekly incident). The depletion point must win the
+      headline, an exhaustion banner must show, and the stale figure must be disclosed.</li>
   <li><a href="#bank">#bank</a> — two reset cards left. They are allowances too, so the
       forecast must count them on top of the windows that roll on their own.</li>
   <li><a href="#unusedcard">#unusedcard</a> — an unused reset-card row must not be counted as a
@@ -258,6 +262,19 @@ if (MODE === "multi") {
     { at: NOON - 3 * DAY, k: 0.6, turns: 26, threads: 5, big: true },
     { at: NOON - 1 * DAY, k: 0.45, turns: 18, threads: 3, big: true },
   ];
+} else if (MODE === "depleted") {
+  // The 2026-08 incident: OpenAI moved a team seat from a monthly to a weekly allowance and
+  // the daily-percentage endpoint kept dividing by the old monthly denominator. The limit
+  // closes at $177.63 spent while the daily ratios still claim a $399.18 allowance.
+  WINDOW_SEC = 7 * 86400;
+  WINDOW_START = Math.floor((NOW - 3 * DAY) / 1000);
+  USED_PERCENT = 100;
+  RENEWS_AT = new Date(NOW + 18 * DAY).toISOString();
+  DAYS = [
+    { at: NOON - 2 * DAY, k: 0.30, turns: 12, threads: 3, big: true },
+    { at: NOON - 1 * DAY, k: 0.40, turns: 16, threads: 3, big: true },
+    { at: NOON,           k: 0.19, turns: 2,  threads: 1, big: true },
+  ];
 } else if (MODE === "bank") {
   WINDOW_SEC = 7 * 86400;
   WINDOW_START = Math.floor((NOW - 2 * DAY) / 1000);
@@ -392,7 +409,7 @@ if (MODE === "multi") {
 // Only personal plans meter credits and daily percentages. Everywhere else these read zero,
 // which is what keeps the rate-card path and the window-percentage fallback under test.
 const ALLOWANCE_CREDITS = 4989.7;
-const METERED = ["personal", "samepersonals", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict", "surfaces"].includes(MODE);
+const METERED = ["personal", "samepersonals", "spill", "unknownmodel", "mixedunknown", "bank", "unusedcard", "changed", "conflict", "depleted", "surfaces"].includes(MODE);
 const DAY_CREDITS = METERED
   ? Object.fromEntries(DAYS.map(d => [utcDay(d.at), Math.round(ALLOWANCE_CREDITS * (d.big ? 2 : 1) * d.k * 0.5 * 10) / 10]))
   : {};
@@ -455,7 +472,7 @@ const USAGE = {
   // address would let one scenario's remembered windows leak into the next one's tables.
   email: `someone+${MODE}@example.com`,
   rate_limit: {
-    allowed: true, limit_reached: false,
+    allowed: MODE !== "depleted", limit_reached: MODE === "depleted",
     primary_window: {
       used_percent: USED_PERCENT,
       limit_window_seconds: WINDOW_SEC,
@@ -464,6 +481,8 @@ const USAGE = {
     },
     secondary_window: null,
   },
+  // Shipped alongside limit_reached on the live API; says why the limit closed.
+  ...(MODE === "depleted" ? { rate_limit_reached_type: { type: "workspace_member_credits_depleted", details: null } } : {}),
   credits: { has_credits: false, unlimited: false, balance: null },
   rate_limit_reset_credits: { available_count: RESET_BANK, applicable_available_count: RESET_BANK },
 };
@@ -574,7 +593,7 @@ if (MODE === "zerobasis") {
 <script>
 const ALL_MODES = [
   "default", "multi", "fresh", "hourly", "fast", "boundary", "personal", "spill",
-  "unknownmodel", "mixedunknown", "changed", "conflict", "bank", "unusedcard", "twosubs",
+  "unknownmodel", "mixedunknown", "changed", "conflict", "depleted", "bank", "unusedcard", "twosubs",
   "sameworkspaces", "samepersonals", "noent", "currentspill", "zerobasis", "rates", "projection",
   "surfaces",
 ];
@@ -665,6 +684,14 @@ async function runScenarioAssertions() {
     if (MODE === "conflict") {
       expect("daily allowance wins conflict", root.querySelector(".gauge-head")?.innerText.includes("$399.18"));
       expect("conflicting window value is disclosed", text.includes("$299.39"));
+    }
+
+    if (MODE === "depleted") {
+      expect("depletion point wins the headline", root.querySelector(".gauge-head")?.innerText.includes("$177.63"), root.querySelector(".gauge-head")?.innerText);
+      expect("depletion reading is measured", root.querySelector(".gauge-head")?.innerText.includes("MEASURED · CEILING"));
+      expect("stale daily figure is disclosed", text.includes("$399.18"), text.slice(0, 1200));
+      expect("exhaustion banner shows", /exhausted/i.test(text));
+      expect("nothing left", text.includes("$0.00 left"), text.slice(0, 1200));
     }
 
     if (MODE === "rates") {

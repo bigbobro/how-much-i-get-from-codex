@@ -58,6 +58,15 @@ When both signals exist, the daily ratio owns the allowance value and the live w
 division is a cross-check. If they differ by more than 5%, the panel keeps the measured daily
 value and shows both numbers instead of silently changing sources.
 
+There is one exception: **a reached limit outranks the daily ratio.** The spend standing when
+the API closed *is* the allowance — no denominator involved — while the daily percentages can
+divide by a stale one. This has happened live: OpenAI moved a Team seat from a monthly to a
+weekly allowance and the daily endpoint kept dividing by the old monthly figure, reading
+2.2× high while the account sat at 0%. When `limit_reached` is set and the two sources
+disagree, the depletion point wins the headline, a banner says why the API closed
+(`rate_limit_reached_type`) and when it resets, and the stale daily figure is disclosed next
+to the number it disputes.
+
 It also disposes of the question *when will it reset next*, by never asking. A day's
 percentage is how much of an allowance that day ate, so adding them up counts allowances
 directly. Crossing 100% means another one was spent.
@@ -213,6 +222,7 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
 | `#changed` | allowance doubles mid-range; the reading follows today and says what it dropped |
 | `#conflict` | daily measurement **$399.18** wins over a conflicting **$299.39** live-window inference, with both disclosed |
+| `#depleted` | the limit closes at **$177.63** while stale daily percentages still claim $399.18 — the depletion point wins, a banner explains, the stale figure is disclosed |
 | `#unknownmodel` | a metered unknown model reconciles the reported **$49.90** into Unattributed, never NaN or a zero-dollar model row |
 | `#mixedunknown` | a known row keeps its **$0.20** price while only the **$1.80** reported remainder becomes Unattributed |
 | `#bank` | reset cards left, counted on top of the windows that roll on their own |

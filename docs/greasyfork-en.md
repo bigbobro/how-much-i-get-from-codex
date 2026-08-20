@@ -26,6 +26,11 @@ Token-only days use OpenAI's current Codex rate card, checked 2026-08-10. The do
 uses an explicit $0.04-per-credit assumption from the credit purchase page; it is configurable
 because OpenAI does not publish a universal credit-to-dollar exchange rate.
 
+A reached limit is its own measurement: the spend standing when the API closed is one whole
+allowance, no denominator involved. When the daily percentages disagree with it — seen live
+after a plan moved from a monthly to a weekly allowance while the daily endpoint kept the old
+denominator — the depletion point wins and the disagreement is spelled out.
+
 ### What it won't do
 
 Guess. Some plans run a five-hour window; some report 0% used forever while the reset time

@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      3.1.0
+// @version      3.2.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -91,7 +91,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "3.1.0";
+  const SCRIPT_VERSION = "3.2.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -134,8 +134,15 @@
       renewalUnavailableHint:
         "The renewal date could not be read, so no calendar month has been substituted. Reload to try again.",
       measuredFrom: (n) => `read off ${n} day${n === 1 ? "" : "s"} of usage`,
+      measuredAtDepletion: "read off the point the limit closed",
       allowanceConflict: (daily, window) =>
         `Daily usage measures this allowance as ${daily}, while the live window percentage implies ${window}. The measured daily value wins; the mismatch is left visible for diagnosis.`,
+      allowanceConflictStale: (daily, window) =>
+        `The limit closed at ${window}, yet the daily percentages claim a ${daily} allowance. Their denominator is stale — seen live when a plan moved from a monthly to a weekly allowance and the daily endpoint kept dividing by the old figure. The depletion point wins.`,
+      allowanceDepletionNote:
+        "How the allowance is read here: the limit is reached, so what was spent when it closed is one whole allowance. This is the only reading that does not depend on the daily percentages.",
+      depleted: (d) => `Allowance exhausted — the API refuses further use. Resets ${d}.`,
+      depletedCredits: (d) => `This seat's credits are exhausted — the API refuses further use. Resets ${d}.`,
       overspent: (n) => `${n} allowances used this cycle, so it reset partway through. "Left" below means what remains of the current one.`,
       allowanceChanged: (n) => `${n} earlier day${n === 1 ? "" : "s"} imply a different allowance, so the plan changed in this range. Only days matching today are counted.`,
       topRateWarning: "Some days have no per-model split and no reported credits, so they are priced at the dearest model's rate. Those days read high.",
@@ -222,6 +229,9 @@
       cycleRemembered: "remembered",
       cycleInferred: "inferred",
       cycleSuspect: "spend looks like more than one allowance",
+      cycleSuspectInferred:
+        "spend exceeds one of today's allowances — a real mid-window reset, or an older slice cut to today's window length after the plan's window changed; the two cannot be told apart",
+      cycleRegimeChanged: (a, b) => `recorded under a ${a}-day window — today's runs ${b} days, so the rows are not comparable`,
       cycleCeilingChanged: (from, to) => `Allowance changed since the last remembered window: ${from} → ${to}`,
       cycleMemLocal:
         "Usage-window history for this subscription is stored only in this browser. It is not uploaded. Clearing site data or switching browsers drops it.",
@@ -342,8 +352,15 @@
       renewalUnavailable: "暂时无法计算本期订阅",
       renewalUnavailableHint: "接口没有返回续费日，所以这里不会拿自然月代替。可以重新读取再试。",
       measuredFrom: (n) => `由 ${n} 天用量测出`,
+      measuredAtDepletion: "由封停点测出",
       allowanceConflict: (daily, window) =>
         `每日用量测出的本份额度是 ${daily}，实时窗口百分比反推的是 ${window}。这里采用每日实测值，同时保留差异供排查。`,
+      allowanceConflictStale: (daily, window) =>
+        `额度在花到 ${window} 时就被封停，但每日百分比接口声称一份额度有 ${daily}。它的分母过期了 —— 实测出现过：套餐从月度额度换成周度额度后，每日接口还在按旧月度数做除法。这里以封停点为准。`,
+      allowanceDepletionNote:
+        "额度这么读出来：已经封停，封停时花掉的就是一整份额度。这是唯一不经过每日百分比的读数。",
+      depleted: (d) => `额度已耗尽，接口已拒绝继续使用。${d} 重置。`,
+      depletedCredits: (d) => `这个席位的 credits 已耗尽，接口已拒绝继续使用。${d} 重置。`,
       overspent: (n) => `这份用量窗口已经用掉 ${n} 份额度，说明中途重置过。下面的「未用」是指当前这一份还剩多少。`,
       allowanceChanged: (n) => `另外 ${n} 天推出来的额度跟今天不一样，说明这段时间里换过套餐。只采用与今天一致的那些天。`,
       topRateWarning: "有些天既没有按模型的拆分，接口也没给 credits，只能按最贵的模型计价，这些天会偏高。",
@@ -430,6 +447,9 @@
       cycleRemembered: "本地记录",
       cycleInferred: "推算",
       cycleSuspect: "花费像不止一份额度",
+      cycleSuspectInferred:
+        "花费超过今天的一份额度 —— 可能真在窗口中途重置过，也可能这段历史早于窗口换档、按现在的长度切片不可比，两者无法区分",
+      cycleRegimeChanged: (a, b) => `记录时窗口是 ${a} 天，现在是 ${b} 天，两行不可比`,
       cycleCeilingChanged: (from, to) => `相对上一份本地记录，额度变了：${from} → ${to}`,
       cycleMemLocal:
         "这份订阅的用量窗口历史只保存在你这台浏览器本地，不会上传。清除网站数据或换浏览器后会丢失。",
@@ -732,6 +752,8 @@
     return {
       usedPercent: Math.min(100, Math.max(0, Number(w.used_percent) || 0)),
       limitReached: !!usage.rate_limit.limit_reached,
+      // e.g. "workspace_member_credits_depleted" — says WHY the API closed, when it did.
+      reachedType: usage?.rate_limit_reached_type?.type || "",
       windowSec,
       inferable: windowSec >= MIN_INFERABLE_WINDOW_SEC,
       /*
@@ -1403,6 +1425,9 @@
         resetAt: bucket.open.resetAt,
         ceiling: bucket.open.ceiling > 0 ? bucket.open.ceiling : null,
         spend: Number(bucket.open.spend) || 0,
+        // The window length in force back then — the history table needs it to spot a
+        // regime change (e.g. monthly → weekly) instead of calling old rows overspent.
+        windowSec: Number(bucket.open.windowSec) || null,
         closedAt: Date.now(),
       });
       if (bucket.closed.length > MEMORY_KEEP) bucket.closed = bucket.closed.slice(-MEMORY_KEEP);
@@ -1410,10 +1435,11 @@
     }
 
     if (!bucket.open || !sameWindowStart(bucket.open.startAt, startAt)) {
-      bucket.open = { startAt, resetAt, ceiling, spend, updatedAt: Date.now() };
+      bucket.open = { startAt, resetAt, ceiling, spend, windowSec: state.win.windowSec, updatedAt: Date.now() };
     } else {
       bucket.open.resetAt = resetAt;
       bucket.open.spend = spend;
+      bucket.open.windowSec = state.win.windowSec;
       if (ceiling != null) bucket.open.ceiling = ceiling;
       bucket.open.updatedAt = Date.now();
     }
@@ -1610,6 +1636,26 @@
   function allowanceReading(spendCredits, usedPercent, limitReached) {
     const daily = measuredAllowance();
     const window = windowAllowance(spendCredits, usedPercent, limitReached);
+
+    /*
+     * A reached limit outranks the daily ratio. The spend standing when the API closed IS
+     * the allowance — no denominator involved — while the daily percentages can divide by
+     * a stale one. Observed live: a plan moved from a monthly to a weekly allowance and
+     * the daily endpoint kept dividing by the old monthly figure, reading 2.2× high while
+     * the account sat at 0%.
+     */
+    if (limitReached && window > 0) {
+      const rel = daily ? Math.abs(daily.credits - window) / Math.max(daily.credits, window) : 0;
+      if (!daily || rel > 0.05) {
+        return {
+          credits: window,
+          source: "depletion",
+          samples: 0,
+          dropped: 0,
+          conflict: daily ? { daily: daily.credits, window } : null,
+        };
+      }
+    }
 
     if (daily) {
       const rel = window > 0 ? Math.abs(daily.credits - window) / Math.max(daily.credits, window) : 0;
@@ -2152,7 +2198,9 @@
     const r = cycleReading();
     const win = state.win;
     const now = Date.now();
-    const allowanceMeasured = r.allowance?.source === "daily-ratio";
+    const source = r.allowance?.source;
+    // The depletion point is a measurement too: the API stopped serving at exactly that spend.
+    const allowanceMeasured = source === "daily-ratio" || source === "depletion";
 
     const ratio = r.ceiling ? Math.min(1, r.s.credits / r.ceiling) : 0;
     const elapsedDays = Math.max(0.5, (now - win.startAt) / DAY_MS);
@@ -2182,7 +2230,13 @@
             ? `<div class="right">
                  <div class="eyebrow ${allowanceMeasured ? "" : "is-inferred"}">${esc(allowanceMeasured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
                  <div class="amount small ${allowanceMeasured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
-                 ${allowanceMeasured ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.allowance.samples))}</div>` : ""}
+                 ${
+                   source === "daily-ratio"
+                     ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.allowance.samples))}</div>`
+                     : source === "depletion"
+                       ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredAtDepletion)}</div>`
+                       : ""
+                 }
                </div>`
             : ""
         }
@@ -2205,13 +2259,30 @@
       </div>
 
       ${
-        willRunOut
-          ? `<p class="verdict alarm">${esc(L.runOut(clock(runOutMs)))}</p>`
-          : r.ceiling
-            ? `<p class="verdict">${esc(L.endAt(usd(Math.min(r.ceiling, perDay * (win.windowSec / 86400)))))}</p>`
-            : win.inferable && enoughElapsed
-              ? `<p class="verdict"><span class="inf">${esc(L.endAt(usd(perDay * (win.windowSec / 86400))))}</span></p>`
-            : `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
+        /* A reached limit makes the pace line fiction — you cannot spend at any pace while
+           the API refuses. Say what happened and when it unlocks instead. */
+        win.limitReached
+          ? `<p class="verdict alarm">${esc(((win.reachedType || "").includes("credits") ? L.depletedCredits : L.depleted)(clock(win.resetAt)))}</p>`
+          : willRunOut
+            ? `<p class="verdict alarm">${esc(L.runOut(clock(runOutMs)))}</p>`
+            : r.ceiling
+              ? `<p class="verdict">${esc(L.endAt(usd(Math.min(r.ceiling, perDay * (win.windowSec / 86400)))))}</p>`
+              : win.inferable && enoughElapsed
+                ? `<p class="verdict"><span class="inf">${esc(L.endAt(usd(perDay * (win.windowSec / 86400))))}</span></p>`
+              : `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
+      }
+
+      ${
+        /* A live disagreement between the two allowance sources belongs next to the number
+           it disputes, not in the footnotes. */
+        r.allowance?.conflict
+          ? `<p class="verdict alarm">${esc(
+              (source === "depletion" ? L.allowanceConflictStale : L.allowanceConflict)(
+                usd(r.allowance.conflict.daily),
+                usd(r.allowance.conflict.window),
+              ),
+            )}</p>`
+          : ""
       }
 
       ${
@@ -2347,10 +2418,24 @@
     const closed = state.memory?.closed || [];
     const ceiling = r.ceiling;
 
+    const lengthDays = (sec) => {
+      const d = sec / 86400;
+      return Number.isInteger(d) ? String(d) : d.toFixed(1);
+    };
+
     // Remembered closed windows first — observed start/reset, not arithmetic lookback.
     for (const c of closed) {
-      const suspect = ceiling && c.spend > ceiling * 1.15;
-      const note = suspect ? `${L.cycleRemembered} · ${L.cycleSuspect}` : L.cycleRemembered;
+      // A recorded length that differs from today's means the plan regime changed
+      // (monthly → weekly has been observed live). Such a row is history from different
+      // rules, not an overspent window.
+      const regimeChanged =
+        c.windowSec > 0 && state.win.windowSec > 0 && Math.abs(c.windowSec - state.win.windowSec) > 3600;
+      const suspect = !regimeChanged && ceiling && c.spend > ceiling * 1.15;
+      const note = regimeChanged
+        ? `${L.cycleRemembered} · ${L.cycleRegimeChanged(lengthDays(c.windowSec), lengthDays(state.win.windowSec))}`
+        : suspect
+          ? `${L.cycleRemembered} · ${L.cycleSuspect}`
+          : L.cycleRemembered;
       const spend = c.spend > 0 ? usd(c.spend) : "—";
       const amount = c.ceiling
         ? `${spend} <span class="inf">/ ${usd(c.ceiling)}</span>`
@@ -2364,8 +2449,11 @@
       for (const p of seg.past) {
         if (!p.covered || !(p.spend > 0)) continue;
         if (closed.some((c) => sameWindowStart(c.startAt, p.start))) continue;
+        // No record says what window length ruled back then, so over-allowance spend has
+        // two readings — a real mid-window reset, or slicing a longer-window era by
+        // today's length. The note must not pretend to know which.
         const suspect = ceiling && p.spend > ceiling * 1.15;
-        const note = suspect ? `${L.cycleInferred} · ${L.cycleSuspect}` : L.cycleInferred;
+        const note = suspect ? `${L.cycleInferred} · ${L.cycleSuspectInferred}` : L.cycleInferred;
         rows.push([span(p.start, p.end), note, `<span class="inf">${usd(p.spend)}</span>`, "past"]);
       }
     }
@@ -3131,10 +3219,12 @@
       ...(allowance?.dropped ? [[L.allowanceChanged(allowance.dropped), true]] : []),
       ...(allowance?.source === "daily-ratio"
         ? [[L.allowanceNote(allowance.samples), false]]
-        : win && !win.inferable
-          ? [[L.n11, true]]
-          : [[L.n3, false]]),
-      ...(allowance?.conflict ? [[L.allowanceConflict(usd(allowance.conflict.daily), usd(allowance.conflict.window)), true]] : []),
+        : allowance?.source === "depletion"
+          ? [[L.allowanceDepletionNote, false]]
+          : win && !win.inferable
+            ? [[L.n11, true]]
+            : [[L.n3, false]]),
+      // A conflict between the two allowance sources is shown next to the headline, not here.
       ...(overlap ? [[L.n4(clock(win.startAt), first.date, usd(first.credits)), true]] : []),
       ...(days.some((d) => d.models.some((m) => m.speed && m.speed !== "standard"))
         ? [[L.nTurnSplit, false]]
