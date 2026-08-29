@@ -24,7 +24,7 @@ running after you close it.
 ## What it tells you
 
 - What one allowance is worth, and how many you have used
-- What is left in the current window, and when you run out at your pace
+- What is left in the current window, and when the API resets it
 - How much more opens before your subscription renews
 - What a turn costs, and what a thousand lines of code costs
 - Which day, which model, and which surface took the most
@@ -177,10 +177,10 @@ renews on Sep 18, the three usable windows are the current one, Sep 4→11, and 
 reset exactly at Sep 18 belongs to the next billing period and is not counted here.
 
 Spending is capped per window, not per day. Burn an allowance on the first morning and the
-rest of that window yields nothing however fast you were going, so a daily average run
-forward will happily print totals the account cannot reach. The projection is capped by the
-allowances that actually open before renewal, and the panel names which constraint is
-binding.
+rest of that window yields nothing however fast you were going. The projection therefore
+uses the current allowance, the current remainder, and the windows that open before renewal;
+it never extends a daily average. The panel shows the daily average only as historical
+description.
 
 ---
 
@@ -269,9 +269,9 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#fresh` | placeholder window |
 | `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
 | `#noent` | no renewal date — withholds the subscription view rather than substituting a calendar month |
-| `#zerobasis` | the latest completed zero-spend window remains a valid pace basis |
+| `#zerobasis` | the latest completed zero-spend window remains visible as history |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
-| `#projection` | placeholder window keeps measured spend and calendar-day average, but no uncapped projection |
+| `#projection` | placeholder window keeps measured spend and completed-day average (descriptive only), but no uncapped projection |
 | `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web; total **$99.80** |
 | `#dual` | the 5-hour + 7-day shape; weekly correction, timestamp-based three-window formula, and a separate reset-card term |
 

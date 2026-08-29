@@ -8,7 +8,7 @@ This panel works it out.
 ### What you get
 
 - What one allowance is actually worth, in dollars
-- How much is left, and when you run out at your current pace
+- How much the current week has used, and how much remains
 - How many more allowances open before your subscription renews
 - What a turn costs you. What a thousand lines of code costs you.
 - Which day, which model and which surface ate the most
@@ -17,9 +17,10 @@ This panel works it out.
 
 The usage endpoint returns one of three shapes: a 5-hour bar beside a 7-day bar, a 7-day
 bar alone, or a longer monthly-style window. The 5-hour percentage is a short-term signal
-and is never a dollar ceiling; the weekly percentage corrects the weekly ceiling and the
-subscription forecast. They are never mixed into one denominator. A 5-hour bar does not
-appear on its own.
+and is never a dollar ceiling; current-week spend divided by the weekly percentage gives the
+weekly ceiling, and that ceiling drives the subscription forecast. The forecast counts the
+windows that open before renewal and never extends a daily average. The two percentages are
+never mixed into one denominator. A 5-hour bar does not appear on its own.
 
 Two spend endpoints each hold half of the dollar measurement. One says what a day cost in
 credits. The other says what percentage of an allowance that same day ate. Divide, and

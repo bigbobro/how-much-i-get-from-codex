@@ -12,8 +12,8 @@ the real script would never have fetched.</p>
   <li><a href="#">default</a> — 30.4-day window, 99.93% used, the single recorded real day.
       Expect <b>$249.83 spent / $250.00 ceiling</b>. This is the regression test that matters.</li>
   <li><a href="#multi">#multi</a> — 7-day window, renewal 24 days out. One completed cycle shows; the older
-      rows are correctly clipped away as never-fetched. Exercises the strip, the pace basis
-      and the multi-opening projection.</li>
+      rows are correctly clipped away as never-fetched. Exercises the strip, the weekly-capacity
+      basis and the multi-opening projection.</li>
   <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Should land on the subscription view.</li>
   <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
   <li><a href="#boundary">#boundary</a> — windows open at 06:00 UTC, spend sits on days two
@@ -56,7 +56,7 @@ the real script would never have fetched.</p>
       billing period. Its table row and chart bar must be clipped so their measured total equals
       the $149.90 billing-period headline.</li>
   <li><a href="#zerobasis">#zerobasis</a> — the latest remembered closed window spent $0. Its
-      zero pace must win over an older inferred active window.</li>
+      zero spend must remain visible instead of borrowing an older inferred active window.</li>
   <li><a href="#rates">#rates</a> — current Terra, Luna and GPT-Image-2 text rates. Expect
       $14.20, $1.42 and $16.25 respectively, $31.87 total.</li>
   <li><a href="#projection">#projection</a> — a freshly reset placeholder window with five active
@@ -835,7 +835,7 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "zerobasis") {
-      expect("zero-spend latest window sets pace", text.includes("$199.86 of it"), text.slice(0, 1000));
+      expect("zero-spend latest window sets remainder", text.includes("$199.86 left"), text.slice(0, 1000));
     }
 
     if (MODE === "projection") {
@@ -856,20 +856,18 @@ async function runScenarioAssertions() {
     if (MODE === "thinweek") {
       const weeklyCard = root.querySelector('[data-window-kind="weekly"]')?.innerText || "";
       expect("weekly window is labelled", /7-day/i.test(weeklyCard), weeklyCard);
-      expect("thin window claims no dollar ceiling", !/\$/.test(weeklyCard), weeklyCard);
-      expect("the reason is stated", /no whole reported day/i.test(text), text.slice(0, 2000));
+      expect("current weekly pair yields a ceiling", /\$57\.95 total.*\$17\.96 used.*\$39\.98 left/i.test(weeklyCard), weeklyCard);
       expect("today's absence is named", /has not reported today/i.test(text), text.slice(0, 2500));
       root = await chooseView(root, "period");
       text = root.querySelector(".panel")?.innerText || "";
-      expect("no subscription capacity without a ceiling", !/Subscription capacity/i.test(text), text.slice(0, 1600));
+      expect("subscription capacity uses the current weekly estimate", /Subscription capacity/i.test(text), text.slice(0, 1600));
       expect("period spend is still measured", /\$17\.96/.test(text), text.slice(0, 1600));
     }
 
     if (MODE === "thinprev") {
       const weeklyCard = root.querySelector('[data-window-kind="weekly"]')?.innerText || "";
-      expect("anchor value is shown", /\$203\.61/.test(weeklyCard), weeklyCard);
-      expect("anchor provenance is named", /last complete window/i.test(weeklyCard + text), text.slice(0, 2000));
-      expect("the reason is stated", /no whole reported day/i.test(text), text.slice(0, 2000));
+      expect("current weekly estimate wins", /\$57\.95 total.*\$17\.96 used.*\$39\.98 left/i.test(weeklyCard), weeklyCard);
+      expect("previous anchor is only a fallback", !/\$203\.61|last complete window/i.test(weeklyCard), weeklyCard);
     }
 
     if (MODE === "dual") {
@@ -877,6 +875,7 @@ async function runScenarioAssertions() {
       expect("weekly window is labelled", /7-day/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1200));
       expect("short remaining is visible", /100% remaining/i.test(root.querySelector('[data-window-kind="short"]')?.innerText || ""), text.slice(0, 1200));
       expect("weekly remaining is visible", /84% remaining/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1200));
+      expect("weekly dollar reading names used and left", /\$199\.59 total.*\$31\.94 used.*\$167\.65 left/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1600));
       root = await chooseView(root, "period");
       text = root.querySelector(".panel")?.innerText || "";
       expect("weekly correction is named", /weekly correction/i.test(text), text.slice(0, 1600));
@@ -885,6 +884,7 @@ async function runScenarioAssertions() {
       expect("reset card is a separate formula term", root.querySelector(".k-cards")?.parentElement?.parentElement?.innerText.includes("$199.59"), text.slice(0, 1800));
       expect("subscription formula is visible", /spent .*\+.*still available.*\+.*reset cards/i.test(text), text.slice(0, 1800));
       expect("subscription formula reconciles", text.includes("$798.35"), text.slice(0, 1800));
+      expect("period forecast has no pace extrapolation", !/pace alone would reach|at the pace of the usage window/i.test(text), text.slice(0, 2200));
       expect("short window is not a dollar ceiling", /withheld|whole day/i.test(root.querySelector('[data-window-kind="short"]')?.innerText || ""), text.slice(0, 1800));
     }
   } catch (error) {

@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      3.3.0
+// @version      3.3.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "3.3.0";
+  const SCRIPT_VERSION = "3.3.1";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -140,7 +140,8 @@
       usedPercent: (p) => `${p}% used`,
       resetAtLabel: (d) => `resets ${d}`,
       shortWindowEstimate: "Dollar amount withheld: usage is reported by whole day, not by five-hour window.",
-      weeklyCorrection: (source) => `7-day correction · ${source}`,
+      weeklyCorrection: (source, total, used, left) =>
+        `7-day correction · ${source} · ${total} total · ${used} used · ${left} left`,
       subscriptionFormula: (spent, left, total, extras, windows, weekly) =>
         `Subscription capacity = spent ${spent} + ${windows} ${weekly ? "weekly window" + (windows === 1 ? "" : "s") : "allowance" + (windows === 1 ? "" : "s")} still available ${left}${extras ? ` + ${extras}` : ""} = ${total}.`,
 
@@ -171,12 +172,14 @@
       weeklyFromPrevious:
         "Taken from the last complete window of the same length. This week's own spend is not divided into its live percentage: the two do not cover the same stretch of time.",
       weeklyThin:
-        "No dollar figure for this week yet. Its spend is not divided into the live percentage, because the opening day's row also counts spending from before the week and anything since the feed last settled is in no row at all — neither gap shrinks with time. A figure appears once this week reaches its limit, or once a complete week is remembered to read it from.",
+        "No dollar figure for this week yet. There is no current spend-and-percentage pair, and no immediately previous complete week to use as an anchor.",
       todayMissing: "The usage feed has not reported today yet. Live percentages include it; every dollar figure here stops before it.",
       depletedShort: (d) =>
         `The short window is used up — the API refuses further use until ${d}. That is not the 7-day quota, which is measured separately.`,
       allowanceConflict: (daily, window) =>
         `Daily usage measures this allowance as ${daily}, while the live window percentage implies ${window}. The measured daily value wins; the mismatch is left visible for diagnosis.`,
+      weeklyAllowanceConflict: (daily, window) =>
+        `The live weekly window percentage implies ${window}, while daily usage measures ${daily}. The weekly value wins for the weekly and subscription figures; the mismatch is left visible for diagnosis.`,
       allowanceConflictStale: (daily, window) =>
         `The limit closed at ${window}, yet the daily percentages claim a ${daily} allowance. Their denominator is stale — seen live when a plan moved from a monthly to a weekly allowance and the daily endpoint kept dividing by the old figure. The depletion point wins.`,
       allowanceDepletionNote:
@@ -194,10 +197,6 @@
       windowSpan: (a, b) => `${a} → ${b}`,
       resetInPre: "resets in",
       resetInPost: "days",
-      perDaySuffix: "/day",
-      runOut: (d) => `On this pace you run out ${d}, before the reset`,
-      endAt: (a) => `On this pace this usage window ends around ${a}`,
-      endAtWeekly: (a) => `On this pace the current week ends around ${a}`,
 
       untilRenewal: "Left before renewal",
       renewalOn: (d) => `renews ${d}`,
@@ -251,15 +250,13 @@
       chartLineSpend: "cumulative $",
       renewalUnknown: "Needs a ceiling before it can project",
       narrCap: (cap, spent, left) => `The period tops out at ${cap}: ${spent} already spent (measured) plus ${left} still to open (inferred).`,
-      narrPaceCapped: (days, rate, end, paced) => `${days} days in at ${rate}/day — pace alone would reach ${paced} by ${end}, but the allowance tops out first, so pace does not decide.`,
-      narrPaceUnder: (days, rate, end, paced) => `${days} days in at ${rate}/day runs to about ${paced} by ${end}, short of the cap.`,
-      narrPacePlain: (days, rate, end, paced) => `${days} days in at ${rate}/day runs to about ${paced} by ${end}.`,
+      projWindowOnly: "Projection uses the current allowance and the windows that open before renewal; it does not extend a daily average.",
       projEarly: "Less than a fifth of the period has gone; this is a coarse extrapolation",
       projNoWindow: "What the period costs depends on how many allowances open before renewal, and this plan does not report its window boundaries, so it cannot be worked out. The spend and the allowance count below are measured.",
-      projNotYet: "Not enough completed days to extrapolate the period",
+      projNotYet: "No current allowance is available to project the period",
       projPayback: (x) => `${x}× projected for the period`,
       chartDaily: "Spend per day",
-      chartDailySub: (r) => `dashed line is ${r} per calendar day`,
+      chartDailySub: (r) => `dashed line is ${r} per completed calendar day · descriptive only`,
       chartModel: "Where the money goes by model",
       chartSurface: "Where the money goes by surface",
       chartSurfaceSub: "split by the API's surface shares, not by token count",
@@ -268,9 +265,6 @@
       seeNumbers: "See the numbers",
       today: "today",
       partialDay: "today is still filling — this bar will grow",
-
-      onPaceInline: (a, p, d) => `at the pace of the usage window that ended ${d} you would use ${a} of it (${p})`,
-      onPaceInlineWeekly: (a, p, d) => `at the pace of the usage window that ended ${d} you would use ${a} of it (${p})`,
 
       cycles: "Usage window by window",
       cyclesWeekly: "Weekly allowance by allowance",
@@ -306,7 +300,7 @@
       periodWhy:
         "Measured over the real billing period rather than the calendar month. The allowance resets on its own clock, so only the billing period answers what one payment buys.",
       activeDays: "Days with usage",
-      dailyAvg: "Average on those days",
+      dailyAvg: "Average on completed days (descriptive)",
       turnsTotal: (n) => `${n} turns`,
 
       cTotal: "Total",
@@ -404,7 +398,8 @@
       usedPercent: (p) => `已用 ${p}%`,
       resetAtLabel: (d) => `${d} 重置`,
       shortWindowEstimate: "暂不换算美元：接口用整天上报用量，无法把花费准确切到 5 小时窗口。",
-      weeklyCorrection: (source) => `7 天额度校正 · ${source}`,
+      weeklyCorrection: (source, total, used, left) =>
+        `7 天额度校正 · ${source} · 总额度 ${total} · 已用 ${used} · 剩余 ${left}`,
       subscriptionFormula: (spent, left, total, extras, windows, weekly) =>
         `本期订阅可花额度 = 已花 ${spent} + 剩余 ${windows}${weekly ? " 个周窗口" : " 份额度"}未花 ${left}${extras ? ` + ${extras}` : ""} = ${total}。`,
 
@@ -433,12 +428,14 @@
       weeklyFromPrevious:
         "取自上一个同样长度的完整窗口。本周自己的花费不拿去除实时百分比：两者覆盖的时间段对不齐。",
       weeklyThin:
-        "本周暂不给美元数。它的花费不拿去除实时百分比 —— 开窗当天那一行同时算进了开窗之前的花费，而 feed 最后落定之后的部分完全没有行，这两个缺口都不会随时间自己变小。等本周触顶、或攒下一个完整周可供读取时，才会出数。",
+        "本周暂不给美元数。当前还没有能配对的周花费和实时百分比，前一个完整周也没有可借用的额度。",
       todayMissing: "用量接口还没上报今天。实时百分比含今天，但这里所有美元数字都停在今天之前。",
       depletedShort: (d) =>
         `短窗口已用尽，接口在 ${d} 之前拒绝继续使用。这跟 7 天额度是两回事，7 天额度在下面单独测。`,
       allowanceConflict: (daily, window) =>
         `每日用量测出的额度是 ${daily}，实时窗口百分比反推的是 ${window}。这里采用每日实测值，同时保留差异供排查。`,
+      weeklyAllowanceConflict: (daily, window) =>
+        `实时周窗口百分比反推的是 ${window}，每日用量测出的是 ${daily}。周窗口的数用于周额度和本期推算，差异照样保留供排查。`,
       allowanceConflictStale: (daily, window) =>
         `额度在花到 ${window} 时就被封停，但每日百分比接口声称一份额度有 ${daily}。它的分母过期了 —— 实测出现过：套餐从月度额度换成周度额度后，每日接口还在按旧月度数做除法。这里以封停点为准。`,
       allowanceDepletionNote:
@@ -456,10 +453,6 @@
       windowSpan: (a, b) => `${a} → ${b}`,
       resetInPre: "还有",
       resetInPost: "天重置",
-      perDaySuffix: " 日均",
-      runOut: (d) => `按这个速度，${d} 就用完了，赶不到重置`,
-      endAt: (a) => `按这个速度，这份用量窗口结束时约花掉 ${a}`,
-      endAtWeekly: (a) => `按这个速度，这个周窗口结束时约花掉 ${a}`,
 
       untilRenewal: "续费前还能拿",
       renewalOn: (d) => `${d} 续费`,
@@ -513,15 +506,13 @@
       chartLineSpend: "累计 $",
       renewalUnknown: "要先推算出额度才能往后推",
       narrCap: (cap, spent, left) => `整期最多到 ${cap}：已花掉的 ${spent} 是实测，续费前还能开出的 ${left} 是推算。`,
-      narrPaceCapped: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 的节奏，到 ${end} 本会冲到 ${paced} —— 但额度先到顶，节奏说了不算。`,
-      narrPaceUnder: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 的节奏，到 ${end} 约 ${paced}，够不着封顶。`,
-      narrPacePlain: (days, rate, end, paced) => `按已过 ${days} 天、日均 ${rate} 推到 ${end}，约 ${paced}。`,
+      projWindowOnly: "按当前额度、当前窗口剩余和续费前会开的窗口推算，不按日均往后外推。",
       projEarly: "账期才过了不到两成，这个外推还很粗",
       projNoWindow: "整期花多少，取决于续费前会开出几份额度；而这个套餐不报窗口边界，所以算不出来。下面的花费和份数都是实测的。",
-      projNotYet: "已完成的天数还不够外推整期",
+      projNotYet: "还没有可用于本期推算的当前额度",
       projPayback: (x) => `整期预计 ${x}×`,
       chartDaily: "每天花了多少",
-      chartDailySub: (r) => `虚线是自然日日均 ${r}`,
+      chartDailySub: (r) => `虚线是已完成日均 ${r}，仅作描述`,
       chartModel: "钱花在哪个模型上",
       chartSurface: "钱花在哪个入口上",
       chartSurfaceSub: "按接口给的入口份额拆，不是按 token 数",
@@ -530,9 +521,6 @@
       seeNumbers: "看具体数字",
       today: "今天",
       partialDay: "今天还没走完，这一天的数还在涨",
-
-      onPaceInline: (a, p, d) => `按 ${d} 结束那个用量窗口的用法，你实际会用掉其中 ${a}（${p}）`,
-      onPaceInlineWeekly: (a, p, d) => `按 ${d} 结束那个周窗口的用法，你实际会用掉其中 ${a}（${p}）`,
 
       cycles: "按用量窗口一份份看",
       cyclesWeekly: "按周额度一份份看",
@@ -567,7 +555,7 @@
       periodWhy:
         "按真实账期算，不按自然月。额度按自己的时钟重置，所以要问一次付费买到了什么，只能按账期算。",
       activeDays: "有用量的天数",
-      dailyAvg: "这些天的日均",
+      dailyAvg: "已完成日均（仅描述）",
       turnsTotal: (n) => `共 ${n} turns`,
 
       cTotal: "总花费",
@@ -1942,16 +1930,11 @@
   /*
    * What one weekly grant is worth, and where that number came from.
    *
-   * Dividing this window's spend by its live used% is deliberately NOT one of the sources.
-   * The percentage is live to the second while the numerator is whole UTC day rows, so it
-   * carries spend from before the window opened and misses everything since the feed last
-   * settled. Neither boundary term is bounded by how long the window has been open: an idle
-   * interior day advances the calendar without adding a single measured dollar, which is how
-   * that division produced $180.39 for a seat whose own history cannot go below $280.
-   *
-   * What is left is honest: a window that hit its limit measured itself with no denominator
-   * at all, the daily percentages measure days directly, and a remembered complete window of
-   * the same shape describes one whole grant. When none of those speak, nothing does.
+   * The current week's spend and live 7-day percentage describe the same allowance, so their
+   * division is the latest usable estimate. Whole-day buckets can include the opening day,
+   * but that is the evidence the API exposes for the current week and is preferable to
+   * replacing a known weekly cap with a calendar-day pace. If the current pair is absent, the
+   * immediately preceding complete window can still act as an anchor.
    */
   function weeklyAllowanceReading() {
     const win = weeklyWindow();
@@ -1978,13 +1961,22 @@
       }
     }
 
-    /*
-     * The daily percentages are not a third source. Each one measures a day against some
-     * allowance the API never names, and on a real seat those percentages accumulate to 244%
-     * inside a single 7-day span — a figure no window-scoped unit can reach. Whatever they
-     * divide by, it is not one weekly grant, so they cannot price one. They still drive the
-     * per-day readouts, where their own scope is the right one.
-     */
+    // The live weekly percentage pairs directly with the current week's spend. Keep the
+    // previous-window anchor only as a fallback when that current pair is absent.
+    const current = windowAllowanceFor(win, spend, 0);
+    if (current > 0) {
+      const rel = daily ? Math.abs(daily.credits - current) / Math.max(daily.credits, current) : 0;
+      if (daily && rel <= 0.05) {
+        return { ...base, ...daily, source: "daily-ratio", conflict: null };
+      }
+      return {
+        ...base,
+        credits: current,
+        source: "window-percent",
+        conflict: daily && rel > 0.05 ? { daily: daily.credits, window: current } : null,
+      };
+    }
+
     const anchor = previousWindowAnchor(win);
     if (anchor) return { ...base, credits: anchor.credits, source: "previous-window", anchor: anchor.from };
 
@@ -2012,67 +2004,30 @@
   const spendInDays = (fromKey, toKey) =>
     toKey < fromKey ? 0 : summarize(state.days.filter((d) => d.date >= fromKey && d.date <= toKey)).credits;
 
-  // The period's pace is visible in its own spending, even when the API withholds a ceiling.
+  // The period projection follows allowance openings, never a calendar-day average.
   function projectPeriodSpend() {
     const p = periodRange();
     const periodDays = Math.round((p.fullEndMs - p.startMs) / DAY_MS);
     const todayKey = dayKey(Date.now());
-    const lastCompleteKey = addDays(todayKey, -1);
-    const basisDays = Math.max(0, (dayMs(lastCompleteKey) - dayMs(p.from)) / DAY_MS + 1);
-    const basisSpend = spendInDays(p.from, lastCompleteKey);
     const measured = spendInDays(p.from, todayKey);
-    const activeDays = state.days.filter((d) => d.date >= p.from && d.date <= lastCompleteKey && d.credits > 0).length;
-    const remainingDays = periodDays - basisDays;
-
-    if (basisDays < 3 || basisSpend <= 0 || activeDays < 2 || remainingDays <= 0) return null;
-
-    /*
-     * With a placeholder window there is no way to know how many allowances still open
-     * before renewal, so there is no cap to hold the pace down — and an uncapped pace is
-     * exactly the figure that overshoots what the account can reach. Report what was
-     * measured and say the rest is unknowable, rather than print a number with nothing
-     * behind it.
-     */
-    if (state.win?.placeholder) return null;
-
-    /*
-     * A daily average run forward is the wrong shape for this. Spending is capped per window,
-     * not per day: burn the whole allowance on the first morning and the rest of that window
-     * yields nothing, no matter how fast you were going. Extrapolating the rate through the
-     * cap produces totals the account could not reach even in principle — on the account this
-     * was found on, $2,568 against a structural maximum of $1,530.
-     *
-     * What actually decides the period is how many allowances open before renewal. The rate
-     * only says whether you will get through them.
-     */
-    const rate = basisSpend / basisDays;
-    const paced = Math.max(measured, basisSpend + rate * remainingDays);
-
     const proj = projectToRenewal();
-    const ceiling = cycleReading()?.ceiling;
-    const obtainable = proj && proj.allowance != null ? proj.allowance : null;
-    const cap = obtainable != null ? measured + obtainable : null;
+    if (!proj || !(proj.ceiling > 0) || !(proj.allowance >= 0)) return null;
 
-    const projected = cap != null ? Math.min(paced, cap) : paced;
+    const allowance = Math.max(0, proj.allowance);
+    const projected = measured + allowance;
+    const elapsedDays = Math.max(0, Math.min(periodDays, (dayMs(todayKey) - p.startMs) / DAY_MS + 1));
 
     return {
       p,
       periodDays,
       todayKey,
-      lastCompleteKey,
-      basisDays,
-      basisSpend,
       measured,
-      activeDays,
-      remainingDays,
-      rate,
-      paced,
-      cap,
-      ceiling,
-      openings: proj?.openings ?? null,
-      capBinds: cap != null && paced > cap,
+      allowance,
+      cap: projected,
       projected,
-      early: basisDays / periodDays < 0.2,
+      ceiling: proj.ceiling,
+      openings: proj?.openings ?? null,
+      early: periodDays > 0 && elapsedDays / periodDays < 0.2,
     };
   }
 
@@ -2084,8 +2039,7 @@
    * reset would have shifted every earlier boundary, so past segments are shown
    * with the caveat and never averaged.
    *
-   * When a full past cycle exists, only the most recent one sets the expected pace.
-   * Averaging older cycles would smear over exactly the change you want to see.
+   * Past segments are shown for context only; they do not drive the forecast.
    */
   function cycleSegments() {
     const r = cycleReading();
@@ -2100,8 +2054,8 @@
      * uniform double-counts the shared day between whichever pair it forgot about.
      *
      * A segment counts as trusted only if all of its days were actually fetched. An
-     * uncovered segment would report a partial sum as a whole cycle, and that segment is
-     * exactly the one the pace estimate leans on.
+     * uncovered segment would report a partial sum as a whole cycle, so it stays visibly
+     * separate from the measured rows.
      */
     const past = [];
     for (let k = 1; k <= 8; k++) {
@@ -2130,23 +2084,15 @@
       }
     }
 
-    const trusted = past.filter((p) => p.covered);
-    const lastFull = trusted.length ? trusted[trusted.length - 1] : null;
-
     return {
       past,
       future,
       openings,
-      lastFull,
       current: { start: state.win.startAt, end: state.win.resetAt, spend: r.s.credits, ceiling: r.ceiling },
     };
   }
 
-  /*
-   * How much allowance is still coming before the subscription renews, two ways:
-   *   allowance — every remaining cycle used to the ceiling
-   *   expected  — every remaining cycle used the way the last full one was
-   */
+  // How much allowance is still coming before the subscription renews.
   function projectToRenewal() {
     const seg = cycleSegments();
     const r = cycleReading();
@@ -2158,7 +2104,6 @@
     const ceiling = weekly?.credits ?? r.ceiling;
     if (!ceiling) return { renewsAt: state.ent.renewsAt, ceiling: null, seg, weekly };
 
-    const W = state.win.windowSec * 1000;
     const weeklySpend = weekly?.spend ?? r.s.credits;
     const usedByPercent =
       weekly && weekly.window?.hasUsedPercent
@@ -2169,32 +2114,10 @@
     const currentUsed = Math.max(weeklySpend, usedByPercent);
     const leftThisCycle = Math.max(0, ceiling - currentUsed);
 
-    const elapsed = Math.max(0.5 * DAY_MS, now - state.win.startAt);
-    const perMs = r.s.credits / elapsed;
-    const restOfThisCycle = Math.min(leftThisCycle, perMs * Math.max(0, state.win.resetAt - now));
-
-    /*
-     * Granted and usable are different quantities. A window opening hands over the whole
-     * ceiling even when only two days of the billing period remain — what limits you then is
-     * time, not allowance. So the allowance counts openings at full value, while the
-     * expectation counts the hours you actually have, at the pace of the last finished cycle.
-     */
     // Every unused reset card is one more allowance that can be opened before renewal.
     const bank = state.resetCards?.available ?? state.win.resetBank ?? 0;
     const naturalOpenings = countFutureOpenings(state.win, state.ent.renewsAt);
     const openings = naturalOpenings + bank;
-    const usableTime = Math.max(0, state.ent.renewsAt - state.win.resetAt) / W;
-    // Prefer a locally remembered closed window — its boundaries were observed, not guessed.
-    const lastMem = state.memory?.closed?.length
-      ? state.memory.closed[state.memory.closed.length - 1]
-      : null;
-    const hasRememberedBasis = !!lastMem && Number.isFinite(lastMem.spend) && lastMem.spend >= 0;
-    const basis = hasRememberedBasis
-      ? lastMem.spend
-      : seg.lastFull
-        ? seg.lastFull.spend
-        : Math.min(ceiling, perMs * W);
-    const basisEnd = lastMem?.resetAt || (seg.lastFull ? seg.lastFull.end : null);
 
     // Purchased credit balance is spendable after the plan pool; add it to what is still left.
     const creditLeft = state.purchased?.unlimited ? 0 : Math.max(0, state.purchased?.balance || 0);
@@ -2208,13 +2131,9 @@
       openings,
       bank,
       naturalOpenings,
-      hasPartial: usableTime % 1 > 0.001,
+      hasPartial: (Math.max(0, state.ent.renewsAt - state.win.resetAt) / (state.win.windowSec * 1000)) % 1 > 0.001,
       creditLeft,
       allowance: windowLeft + creditLeft,
-      expected: restOfThisCycle + usableTime * basis + creditLeft,
-      basis,
-      basisIsLastFull: hasRememberedBasis || !!seg.lastFull,
-      basisEnd,
       weeklyUsedPercent: weekly?.usedPercent ?? null,
       weeklySpend,
     };
@@ -2559,11 +2478,22 @@
       "weekly",
       L.weeklyWindowLabel,
       weeklyReading?.credits > 0
-        ? `${L.weeklyCorrection(
-            weeklyReading.source === "previous-window"
+        ? (() => {
+            const source =
+              weeklyReading.source === "previous-window"
                 ? L.measuredFromPrevious
-                : L.measured,
-          )} · ${usd(weeklyReading.credits)}`
+                : weeklyReading.source === "depletion"
+                  ? L.measuredAtDepletion
+                  : weeklyReading.source === "daily-ratio"
+                    ? L.measured
+                    : L.inferred;
+            const used = Math.max(
+              weeklyReading.spend || 0,
+              weeklyReading.credits * (Number(weekly.usedPercent) || 0) / 100,
+            );
+            const left = Math.max(0, weeklyReading.credits - used);
+            return L.weeklyCorrection(source, usd(weeklyReading.credits), usd(used), usd(left));
+          })()
         : "",
     );
 
@@ -2612,8 +2542,6 @@
     const allowanceMeasured = source === "daily-ratio" || source === "depletion";
 
     const ratio = r.ceiling ? Math.min(1, r.s.credits / r.ceiling) : 0;
-    const elapsedDays = Math.max(0.5, (now - win.startAt) / DAY_MS);
-    const perDay = r.s.credits / elapsedDays;
     const enoughElapsed = (now - win.startAt) / DAY_MS >= 2;
     /*
      * A measured ceiling is one allowance, and day buckets can hold more than one — a boundary
@@ -2622,8 +2550,6 @@
      */
     const remaining = r.ceiling ? Math.max(0, r.ceiling - r.s.credits) : null;
     const overspent = r.ceiling ? r.s.credits > r.ceiling : false;
-    const runOutMs = remaining > 0 && perDay > 0 ? now + (remaining / perDay) * DAY_MS : null;
-    const willRunOut = runOutMs != null && runOutMs > now && runOutMs < win.resetAt;
 
     return `
       ${windowStatusHtml()}
@@ -2670,22 +2596,20 @@
 
       ${
         /* A block on a shorter window is not a block on this one. Say so on its own line so
-           the pace and run-out verdicts below still get to speak for the window they measure. */
+           the current weekly reading still gets to speak for the window it measures. */
         shortBlocked ? `<p class="verdict alarm">${esc(L.depletedShort(clock(shortBlocked.resetAt)))}</p>` : ""
       }
 
       ${
-        /* A reached limit makes the pace line fiction — you cannot spend at any pace while
-           the API refuses. Say what happened and when it unlocks instead. */
+        /* A reached limit means the API refuses further use. Say what happened and when it
+           unlocks instead of inventing a pace-based run-out. */
         blockedWindow
           ? `<p class="verdict alarm">${esc(((blockedWindow.reachedType || "").includes("credits") ? L.depletedCredits : L.depleted)(clock(blockedWindow.resetAt)))}</p>`
-          : willRunOut
-            ? `<p class="verdict alarm">${esc(L.runOut(clock(runOutMs)))}</p>`
-              : r.ceiling
-                ? `<p class="verdict">${esc(windowCopy("endAt")(usd(Math.min(r.ceiling, perDay * (win.windowSec / 86400)))))}</p>`
-              : win.inferable && enoughElapsed
-                ? `<p class="verdict"><span class="inf">${esc(windowCopy("endAt")(usd(perDay * (win.windowSec / 86400))))}</span></p>`
-              : `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
+          : !r.ceiling && win.inferable && enoughElapsed
+            ? `<p class="verdict"><span class="inf">${esc(L.noCeiling(Math.round(r.used)))}</span></p>`
+            : !r.ceiling
+              ? `<p class="verdict">${esc(win.inferable ? L.noCeiling(Math.round(r.used)) : L.windowTooShort)}</p>`
+              : ""
       }
 
       ${
@@ -2703,7 +2627,11 @@
            it disputes, not in the footnotes. */
         r.allowance?.conflict
           ? `<p class="verdict alarm">${esc(
-              (source === "depletion" ? L.allowanceConflictStale : L.allowanceConflict)(
+              (source === "depletion"
+                ? L.allowanceConflictStale
+                : source === "window-percent"
+                  ? L.weeklyAllowanceConflict
+                  : L.allowanceConflict)(
                 usd(r.allowance.conflict.daily),
                 usd(r.allowance.conflict.window),
               ),
@@ -2721,11 +2649,6 @@
         ${!r.ceiling && win.inferable && enoughElapsed ? `<span>${esc(L.noCeiling(Math.round(r.used)))}</span>` : ""}
         <span>${esc(L.windowSpan(clock(win.startAt), clock(win.resetAt)))}</span>
         <span>${esc(L.resetInPre)} <b>${Math.max(0, (win.resetAt - now) / DAY_MS).toFixed(1)}</b> ${esc(L.resetInPost)}</span>
-        ${
-          /* A per-day rate needs at least a day of window to divide by. On a 5-hour window
-             the whole day's spend would be attributed to a fraction of a day. */
-          win.inferable ? `<span><b>${usd(perDay)}</b>${esc(L.perDaySuffix)}</span>` : ""
-        }
         ${
           (state.resetCards?.available || 0) > 0 && r.ceiling
             ? `<span>${esc(L.resetCardsAvail(state.resetCards.available, usd(state.resetCards.available * r.ceiling)))}</span>`
@@ -2795,29 +2718,13 @@
 
     let forecastBlock = "";
     if (proj) {
-      /*
-       * You cannot use more than you were granted, so the expectation is capped at the
-       * allowance — a past cycle can out-spend the inferred ceiling (the shared pool makes the
-       * ceiling read low), and an uncapped figure would print "$700 of it — 100.0%" under a
-       * $650 headline.
-       */
-      const expected = proj.ceiling == null ? 0 : Math.min(proj.expected, proj.allowance);
-      const paceEnd = proj.basisEnd || proj.seg?.lastFull?.end;
-      const onPace =
-        proj.ceiling != null && proj.basisIsLastFull && proj.allowance > 0 && paceEnd
-          ? `<div class="readout"><span>${esc(
-              windowCopy("onPaceInline")(usd(expected), pct(expected / proj.allowance), shortDate(dayKey(paceEnd))),
-            )}</span></div>`
-          : "";
-
       const allowance =
         proj.ceiling == null
           ? `<div class="amount small" style="color:var(--ink-3)">—</div>
              <div class="readout"><span>${esc(L.renewalUnknown)}</span></div>`
           : `<div class="amount small is-inferred">${usd(proj.allowance)}</div>
              <div class="readout"><span>${esc(L.renewalOn(dateOnly(proj.renewsAt)))}</span></div>
-             <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>
-             ${onPace}`;
+             <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>`;
 
       forecastBlock = `
       <div class="forecast">
@@ -3510,12 +3417,10 @@
 
     /*
      * One narrative, one sentence per idea: what the period tops out at and what that is
-     * made of, whether pace or allowance decides it, and where the window count comes
-     * from. narrCap must quote the cap itself — projected can sit below it, and then
-     * "spent + still to open" would no longer add up to the number in the sentence.
+     * made of, and where the window count comes from. narrCap quotes the measured spend
+     * plus the remaining allowance that can open before renewal.
      * Today's one-allowance size only prices the future, never historical window dollars.
      */
-    const endKey = projection ? shortDate(dayKey(p.fullEndMs)) : "";
     const footnotes = [
       projection && projection.cap != null
         ? L.narrCap(
@@ -3524,13 +3429,7 @@
             usd(Math.max(0, projection.cap - projection.measured)),
           )
         : null,
-      projection
-        ? projection.cap == null
-          ? L.narrPacePlain(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
-          : projection.capBinds
-            ? L.narrPaceCapped(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
-            : L.narrPaceUnder(projection.basisDays, usd(projection.rate), endKey, usd(projection.paced))
-        : null,
+      projection ? L.projWindowOnly : null,
       projection?.early ? L.projEarly : null,
       grant && ceiling
         ? grant.resets > 0
@@ -4052,8 +3951,8 @@
 
       /*
        * Reach back far enough to cover the billing period, the current cycle, and one whole
-       * cycle before it. That last one is what the pace estimate is built on, so fetching a
-       * partial slice of it would quietly understate every projection.
+       * cycle before it. That history supports the usage-window ledger, so fetching a partial
+       * slice of it would quietly understate the period context.
        */
       const today = dayKey(Date.now());
       const anchors = [state.win, weeklyWindow(), shortWindow()]
