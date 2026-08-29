@@ -1,7 +1,7 @@
-> **Monthly usage limit — 70% remaining.**
+> **5-hour usage limit — 70% remaining. Weekly usage limit — 40% remaining.**
 
-70% of *what*, exactly? OpenAI has never said. The number on the other side of that
-percentage sign does not appear anywhere in the product or the docs.
+70% of *what*, exactly? OpenAI has never said. The two bars answer different questions,
+and the dollar denominator does not appear anywhere in the product or the docs.
 
 This panel works it out.
 
@@ -15,8 +15,15 @@ This panel works it out.
 
 ### How
 
-Two endpoints each hold half the answer. One says what a day cost in credits. The other says
-what percentage of an allowance that same day ate. Divide, and there it is.
+The usage endpoint returns one of three shapes: a 5-hour bar beside a 7-day bar, a 7-day
+bar alone, or a longer monthly-style window. The 5-hour percentage is a short-term signal
+and is never a dollar ceiling; the weekly percentage corrects the weekly ceiling and the
+subscription forecast. They are never mixed into one denominator. A 5-hour bar does not
+appear on its own.
+
+Two spend endpoints each hold half of the dollar measurement. One says what a day cost in
+credits. The other says what percentage of an allowance that same day ate. Divide, and
+there it is.
 
 On a real Plus account: **49.897 credits per percent, on all 26 days with usage, spread of
 exactly zero.** One of those days came in at 100.000% — an entire week's allowance, gone in a
@@ -33,9 +40,11 @@ denominator — the depletion point wins and the disagreement is spelled out.
 
 ### What it won't do
 
-Guess. Some plans run a five-hour window; some report 0% used forever while the reset time
-quietly slides along with the clock. When the ground gives way it tells you and shows
-nothing, because a confident wrong number is worse than a blank.
+Guess. A five-hour percentage only appears beside a 7-day bar, and is shown as status, not
+turned into a dollar ceiling, because usage only arrives in whole days. Some plans report
+0% used forever while the reset time quietly slides along with the clock. When the ground
+gives way it tells you and shows nothing, because a confident wrong number is worse than a
+blank.
 
 Solid means measured. Dashed amber means worked out. You always know which one you are
 looking at.

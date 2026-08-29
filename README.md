@@ -5,8 +5,9 @@
 A Tampermonkey panel for the Codex analytics page. It works out the number OpenAI does not
 publish: **how much API usage your subscription actually gives you.**
 
-The official page shows one bar — *Monthly usage limit, 70% remaining*. 70% of what? The
-denominator is never named anywhere. This reads it off the API.
+The official page may show two bars now — a short *5-hour usage limit* and a *weekly usage
+limit*. Their percentages answer different questions, and the API does not put a dollar
+denominator beside either one. This reads both windows and keeps their meanings separate.
 
 ![](docs/panel.jpg)
 
@@ -32,7 +33,22 @@ running after you close it.
 
 ## How the allowance is read
 
-Two endpoints each hold half the answer:
+`/backend-api/wham/usage` returns one of three rate-limit shapes. The script classifies
+windows by `limit_window_seconds`, never by whether the API happened to call them `primary`
+or `secondary`:
+
+- **5-hour + 7-day together.** The 5-hour percentage is a short-term signal and is never
+  turned into a dollar ceiling (usage history is bucketed by whole UTC day). The 7-day
+  percentage is the weekly signal: current-week spend ÷ that percentage corrects the weekly
+  ceiling, and that ceiling drives the subscription forecast.
+- **7-day only.** Same weekly correction and subscription forecast, with no short-term card.
+- **A single longer window (about a month).** Older plans still use the daily
+  spend/percentage measurement, with the live window as a cross-check.
+
+The two percentages are never mixed into one denominator. A 5-hour bar does not appear on
+its own in this product.
+
+Two usage endpoints each hold half of the dollar measurement:
 
 | Endpoint | Gives | Missing |
 |---|---|---|
@@ -47,16 +63,17 @@ allowance = a day's credits ÷ that day's percentage × 100
 
 On a live Plus account that ratio came out at **49.897 credits per percent on all 26 days
 with usage, with a spread of exactly zero** — an allowance of 4,989.7 credits. One of those
-days landed on exactly 100.000%, so the figure can also just be read straight off it.
+days landed on exactly 100.000%, so the figure can also just be read straight off it. In the
+dual-window case, that day-level measurement is compared with the current weekly window; the
+weekly percentage is the correction when the old denominator is stale.
 
-A single day is enough, and the rate limit window is never involved. That matters, because
-the window is not always real: on some plans `used_percent` sits at 0 permanently while
-`reset_at` slides forward with the clock. Dividing spend by that produces a confident number
-resting on nothing. The panel detects it and hides everything built on those boundaries.
+A short window is not always measurable from this history: on some plans `used_percent` sits at
+0 permanently while `reset_at` slides forward with the clock. Dividing spend by that produces a
+confident number resting on nothing. The panel detects such placeholder boundaries and hides
+everything counted from them.
 
-When both signals exist, the daily ratio owns the allowance value and the live window
-division is a cross-check. If they differ by more than 5%, the panel keeps the measured daily
-value and shows both numbers instead of silently changing sources.
+When the daily and weekly readings differ by more than 5%, the weekly value is used for the
+weekly/subscription forecast and the measured daily value is shown beside it for diagnosis.
 
 There is one exception: **a reached limit outranks the daily ratio.** The spend standing when
 the API closed *is* the allowance — no denominator involved — while the daily percentages can
@@ -117,8 +134,9 @@ cost, and it is not the price of the allowance.
 A wrong number stated confidently is worse than a blank, so the panel withholds a figure
 whenever the ground under it gives way:
 
-- **The window is shorter than a day.** Usage only arrives in whole UTC days, so a five-hour
-  window has nothing to divide into. No ceiling, no cycle view.
+- **The window is shorter than a day.** That only happens as the 5-hour half of a dual-window
+  account. The percentage is shown as a short-term status but not converted into a dollar
+  ceiling; the weekly window still supplies the cycle and subscription view.
 - **The window never opens.** 0% used with a reset that slides forward is a placeholder. The
   measured allowance and the spending still stand; the cycle boundaries and everything
   counted off them are hidden.
@@ -135,10 +153,28 @@ whenever the ground under it gives way:
 
 ### Projections
 
+The subscription period is the interval from the current payment to the next entitlement
+renewal, not an assumed calendar month. The script counts weekly openings from timestamps and
+keeps the renewal boundary out of the current period (billing intervals are `[start, renewal)`).
+
 Two things open an allowance: the window rolling on its own schedule, and a **reset card**
 spent by hand to open one early. Both are readable — `reset_at` steps forward on a fixed
 boundary, and `rate_limit_reset_credits.available_count` says how many cards are left — so
 the forecast is arithmetic rather than a guess about the future.
+
+For a weekly account, the subscription-capacity line is deliberately decomposed as:
+
+```
+subscription capacity = spent so far
+                     + current remainder + future weekly openings × weekly ceiling
+                     + unused reset cards × weekly ceiling
+                     + purchased credit balance
+```
+
+The UI writes the same idea as **spent + remaining weekly windows + reset-card credit**. For
+example, if the current weekly window resets on Sep 4, then on Sep 11, and the subscription
+renews on Sep 18, the three usable windows are the current one, Sep 4→11, and Sep 11→18. A
+reset exactly at Sep 18 belongs to the next billing period and is not counted here.
 
 Spending is capped per window, not per day. Burn an allowance on the first morning and the
 rest of that window yields nothing however fast you were going, so a daily average run
@@ -156,7 +192,7 @@ These are not unknowns. They lean in a known direction — read the numbers with
 |---|---|
 | **The pool is shared.** Codex, ChatGPT Work and ChatGPT for Excel draw on one allowance, but this API only sees Codex | Spend reads low, so the allowance reads low |
 | **Cycle boundaries do not align with days.** The window opens at a timestamp; usage is bucketed by whole UTC days, and `group_by=hour` is rejected | The opening day is over-counted, so cycle spend reads high. Flagged when it happens |
-| **The window percentage is coarse** — reported to the integer | Only affects the fallback path, used when no daily percentages exist |
+| **Window percentages are coarse** — reported to the integer | The weekly correction inherits that uncertainty; the 5-hour card remains a status signal rather than a dollar conversion |
 
 Two things the API does not expose at all:
 
@@ -221,7 +257,7 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#multi` | 7-day window, a completed cycle, multi-opening forecast |
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
 | `#changed` | allowance doubles mid-range; the reading follows today and says what it dropped |
-| `#conflict` | daily measurement **$399.18** wins over a conflicting **$299.39** live-window inference, with both disclosed |
+| `#conflict` | weekly-window correction **$299.39** wins over a conflicting daily measurement **$399.18**, with both disclosed |
 | `#depleted` | the limit closes at **$177.63** while stale daily percentages still claim $399.18 — the depletion point wins, a banner explains, the stale figure is disclosed |
 | `#unknownmodel` | a metered unknown model reconciles the reported **$49.90** into Unattributed, never NaN or a zero-dollar model row |
 | `#mixedunknown` | a known row keeps its **$0.20** price while only the **$1.80** reported remainder becomes Unattributed |
@@ -230,14 +266,14 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#twosubs` | one login, two subscriptions — the panel must name which one it reports |
 | `#sameworkspaces` | two matching workspace subscriptions — asks for the renewal date, no per-seat memory write before selection |
 | `#samepersonals` | two matching personal subscriptions — choosing 08/18 refetches and totals the real 07/18 → 08/18 period |
-| `#hourly` | 5-hour window — refuses to infer, and says why |
 | `#fresh` | placeholder window |
 | `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
 | `#noent` | no renewal date — withholds the subscription view rather than substituting a calendar month |
 | `#zerobasis` | the latest completed zero-spend window remains a valid pace basis |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
 | `#projection` | placeholder window keeps measured spend and calendar-day average, but no uncapped projection |
-| `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web |
+| `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web; total **$99.80** |
+| `#dual` | the 5-hour + 7-day shape; weekly correction, timestamp-based three-window formula, and a separate reset-card term |
 
 The default case still reproduces the recorded **$249.83 spent / $250.00 allowance**. The
 suite also checks every panel for `NaN` / `undefined` and verifies that all window-table
