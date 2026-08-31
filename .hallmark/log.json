@@ -1,0 +1,15 @@
+[
+  {
+    "date": "2026-08-31",
+    "scope": "app",
+    "macrostructure": "Workbench",
+    "theme": "Terminal",
+    "hero": "n/a (modal panel)",
+    "nav": "n/a",
+    "footer": "n/a",
+    "enrichment": "none (typography + scanline overlay)",
+    "axes": "dark/mono/chromatic-phosphor-green",
+    "fingerprint": "TUI-chrome|Grid|Hairline|Square|Left-aligned|Fade-only",
+    "brief": "how-much-i-get-from-codex · Tampermonkey usage panel UI redesign (v4.0.0)"
+  }
+]

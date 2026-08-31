@@ -8,7 +8,7 @@
 
 ![](docs/panel.jpg)
 
-<sub>跟随浏览器的浅色 / 深色主题。</sub>
+<sub>深色终端读数界面：实测数字用亮磷光实色，推算数字用暗色斜纹。</sub>
 
 给 Plus、Pro、Business、Team 用户里那些用 Codex 用到会想「这订阅到底值多少」的人。
 

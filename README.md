@@ -11,7 +11,7 @@ denominator beside either one. This reads both windows and keeps their meanings 
 
 ![](docs/panel.jpg)
 
-<sub>Follows the browser's light or dark theme.</sub>
+<sub>A dark terminal readout: measured figures in bright phosphor, inferred ones hatched.</sub>
 
 For anyone on Plus, Pro, Business or Team who uses Codex enough to wonder what the
 subscription is really worth.

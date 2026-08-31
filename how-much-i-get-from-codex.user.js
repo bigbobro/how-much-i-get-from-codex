@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      3.3.1
+// @version      4.0.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "3.3.1";
+  const SCRIPT_VERSION = "4.0.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -2146,167 +2146,186 @@
    *   amber = inferred by this script, and always drawn dashed
    */
   const CSS = `
+    /* Hallmark · macrostructure: Workbench · tone: technical · anchor hue: phosphor green (138-145) · hero: Settled · nav/footer: n/a (modal panel) · modes: dark only
+     * Hallmark · pre-emit critique: P4 H4 E4 S3 R5 V4 · weakest: S - a modal panel has no nav/footer/hero axes to vary; specificity carried by TUI chrome, block gauges, single-hue phosphor discipline
+     * Single dark mode by request. Measured = bright phosphor, inferred = dimmed + hatched + dashed: the hue never changes, only the intensity and texture.
+     */
     :host { all: initial; }
     * { box-sizing: border-box; }
 
     :host {
-      --paper: #FBFAF8; --ink: #17161A; --ink-2: #6C6862; --ink-3: #75716A;
-      --rule: #E4E0D9; --panel: #FFFFFF;
-      --measured: #1B3FD4; --measured-soft: #A8B8EE;
-      --inferred: #B9762A; --inferred-text: #96601F; --inferred-soft: #F6EBDC;
-      --alarm: #B3261E;
-      --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif;
-      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --paper: oklch(11% 0.018 145);
+      --panel: oklch(15% 0.020 145);
+      --panel-2: oklch(19% 0.025 145);
+      --ink: oklch(86% 0.160 138);
+      --ink-2: oklch(78% 0.140 138);
+      --ink-3: oklch(58% 0.090 140);
+      --rule: oklch(28% 0.030 140);
+      --accent: oklch(78% 0.190 138);
+      --glow: oklch(78% 0.190 138 / 0.35);
+      --hatch: oklch(58% 0.090 140 / 0.45);
+      --scrim: oklch(8% 0.015 145 / 0.72);
+      --scanline: oklch(86% 0.160 138 / 0.04);
+      --shadow: oklch(5% 0.012 145 / 0.6);
+      --measured: var(--accent);
+      --measured-soft: oklch(62% 0.110 140);
+      --inferred: oklch(58% 0.090 140);
+      --inferred-text: oklch(66% 0.120 139);
+      --alarm: var(--ink);
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     }
-    @media (prefers-color-scheme: dark) {
-      :host {
-        --paper: #131315; --ink: #ECE9E3; --ink-2: #9A958D; --ink-3: #847F77;
-        --rule: #2C2B2E; --panel: #1A1A1D;
-        --measured: #7C9BFF; --measured-soft: #4A5C9E;
-        --inferred: #E0A055; --inferred-text: #E0A055; --inferred-soft: #2A2118;
-        --alarm: #F2857C;
-      }
-    }
+    ::selection { background: var(--accent); color: var(--paper); }
 
-    /* the trigger — an instrument label, not a call-to-action blob */
+    /* the trigger — a shell prompt docked at the screen edge */
     .trigger {
       position: fixed; top: 66vh; right: 18px; z-index: 2147483646;
-      display: flex; align-items: stretch; padding: 0; overflow: hidden;
-      background: var(--panel); color: var(--ink);
-      border: 1px solid var(--rule); border-radius: 5px;
-      box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px -14px rgba(0,0,0,.4);
-      font-family: var(--sans); cursor: pointer;
-      transition: box-shadow .18s, transform .18s;
+      display: flex; align-items: baseline; gap: 8px; padding: 8px 12px;
+      background: var(--panel); color: var(--ink-2);
+      border: 1px solid var(--rule); border-radius: 0;
+      box-shadow: 0 8px 28px var(--shadow);
+      font-family: var(--mono); font-size: 12px; cursor: pointer;
+      transition: transform .18s var(--ease-out);
     }
-    .trigger:hover { box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 12px 30px -14px rgba(0,0,0,.5); transform: translateY(-1px); }
-    .trigger:focus-visible { outline: 2px solid var(--measured); outline-offset: 2px; }
-    .trigger-mark { width: 3px; background: var(--inferred); flex: none; }
-    .trigger-body { padding: 6px 12px 6px 10px; text-align: left; }
-    .trigger-kicker { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; line-height: 1.4; display: block; }
-    .trigger-name { font-size: 12.5px; font-weight: 650; letter-spacing: -.015em; line-height: 1.25; display: block; }
+    .trigger:hover { transform: translateY(-1px); border-color: var(--accent); color: var(--ink); }
+    .trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .trigger-ps { color: var(--accent); font-weight: 700; }
     .trigger.busy .trigger-name { color: var(--ink-3); }
+
+    /* the live-prompt block cursor; gated by reduced-motion below */
+    .cursor::after { content: "▮"; color: var(--accent); animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
 
     .scrim {
       position: fixed; inset: 0; z-index: 2147483647;
-      background: rgba(18,16,14,.36);
-      display: grid; place-items: start center; padding: 22px 16px 60px;
-      overflow: auto; font-family: var(--sans);
+      background: var(--scrim);
+      display: grid; place-items: start center; padding: 24px 16px 60px;
+      overflow: auto; font-family: var(--mono);
+    }
+    /* faint CRT scanlines laid over everything, never interactive */
+    .scrim::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background: repeating-linear-gradient(var(--scanline) 0 1px, transparent 1px 3px);
     }
     .panel {
-      width: 100%; max-width: 960px; background: var(--paper); color: var(--ink);
-      border: 1px solid var(--rule); border-radius: 8px;
-      box-shadow: 0 30px 80px -20px rgba(0,0,0,.55);
+      width: 100%; max-width: 920px; background: var(--paper); color: var(--ink-2);
+      border: 1px solid var(--rule); border-radius: 0;
+      box-shadow: 0 0 0 1px var(--rule), 0 24px 80px var(--shadow);
       font-size: 13px; line-height: 1.55; overflow: hidden;
     }
 
-    .masthead { display: flex; align-items: flex-start; gap: 14px; padding: 15px 20px 13px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
-    .wordmark { font-size: 16px; font-weight: 680; letter-spacing: -.025em; line-height: 1.15; }
+    .masthead { display: flex; align-items: flex-start; gap: 16px; padding: 12px 20px 12px; border-bottom: 1px solid var(--rule); background: var(--panel); flex-wrap: wrap; }
+    .wordmark { font-size: 13px; font-weight: 700; letter-spacing: .01em; line-height:  1.2; color: var(--ink); text-shadow: 0 0 8px var(--glow); }
+    .wordmark::before { content: "$ "; color: var(--accent); }
     .wordmark em { font-style: normal; color: var(--ink-3); font-weight: 400; }
-    .subhead { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-top: 3px; }
-    .version { font-family: var(--mono); letter-spacing: 0; text-transform: none; font-weight: 500; }
+    .subhead { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-top: 4px; }
+    .version { letter-spacing: 0; text-transform: none; }
     .grow { flex: 1; }
-    .controls { display: flex; align-items: center; gap: 6px; }
+    .controls { display: flex; align-items: center; gap: 8px; }
 
-    .seg { display: flex; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
-    .seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 11px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+    .seg { display: flex; border: 1px solid var(--rule); }
+    .seg button { border: 0; background: transparent; color: var(--ink-3); font: inherit; font-size: 11px; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
     .seg button + button { border-left: 1px solid var(--rule); }
-    .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 600; }
-    .seg button:focus-visible { outline: 2px solid var(--measured); outline-offset: -2px; }
+    .seg button:hover { color: var(--ink); }
+    .seg button[aria-pressed="true"] { background: var(--accent); color: var(--paper); font-weight: 700; }
+    .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-    .ghost { border: 1px solid var(--rule); background: transparent; color: var(--ink-2); width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 13px; line-height: 1; display: grid; place-items: center; }
-    .ghost:hover { color: var(--ink); }
-    .ghost:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
+    .ghost { border: 1px solid var(--rule); background: transparent; color: var(--ink-3); width: 26px; height: 26px; border-radius: 0; cursor: pointer; font-size: 13px; line-height: 1; display: grid; place-items: center; }
+    .ghost:hover { color: var(--ink); border-color: var(--accent); }
+    .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+    .seg button:active, .ghost:active, .mem-clear:active, .subscription-option:active, .trigger:active { transform: translateY(1px); }
     .panel:focus { outline: none; }
-    .sheet { padding: 22px 22px 28px; }
+    .sheet { padding: 20px 20px 28px; }
 
-    /* three tiers of separation: conclusion, diagnosis, ledger */
-    .rule { height: 1px; background: var(--rule); margin: 22px 0; }
+    /* conclusion → diagnosis → ledger, divided by hairlines */
+    .rule { height: 1px; background: var(--rule); margin: 20px 0; }
     .rule.major { margin: 28px 0; }
 
-    .section { margin-top: 22px; }
+    .section { margin-top: 20px; }
     .section:first-child { margin-top: 0; }
-    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 10px; flex-wrap: wrap; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
     .section-head h2 { margin: 0; }
-    .section-note { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; max-width: 70ch; }
+    .section-note { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; max-width: 70ch; }
 
     .gauge-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-    .eyebrow { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); margin-bottom: 5px; }
-    .eyebrow.is-inferred { color: var(--inferred); }
-    .amount { font-family: var(--mono); font-size: 38px; font-weight: 620; letter-spacing: -.04em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-    .amount.small { font-size: 23px; font-weight: 560; }
+    .eyebrow { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); margin-bottom: 4px; }
+    .eyebrow.is-inferred { color: var(--inferred-text); }
+    .amount { font-family: var(--mono); font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.05; color: var(--ink); text-shadow: 0 0 14px var(--glow); font-variant-numeric: tabular-nums; }
+    .amount.small { font-size: 24px; font-weight: 500; }
     .amount.is-inferred {
-      display: inline-block; color: var(--inferred);
-      border-bottom: 1.5px dashed var(--inferred); padding-bottom: 2px;
+      display: inline-block; color: var(--inferred-text); text-shadow: none;
+      border-bottom: 1px dashed var(--inferred); padding-bottom: 2px;
     }
     .gauge-head .right { text-align: right; }
 
     .window-status { margin: 0 0 20px; }
     .window-status h2 { margin-bottom: 4px; }
-    .window-status-note { color: var(--ink-2); font-size: 11.5px; line-height: 1.45; max-width: 72ch; }
-    .window-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
-    .window-status-card { border: 1px solid var(--rule); border-radius: 7px; background: var(--panel); padding: 10px 12px; min-width: 0; }
-    .window-status-card.short { border-color: color-mix(in srgb, var(--measured) 28%, var(--rule)); }
-    .window-status-card.weekly { border-color: color-mix(in srgb, var(--inferred) 38%, var(--rule)); }
-    .window-status-card .window-percent { font: 620 20px/1.15 var(--mono); letter-spacing: -.03em; margin: 2px 0 5px; }
-    .window-status-card .hint { color: var(--ink-2); font-size: 10.5px; line-height: 1.4; margin-top: 6px; }
-    .formula-note { margin-top: 10px; color: var(--ink-2); font-size: 11.5px; line-height: 1.5; }
+    .window-status-note { color: var(--ink-3); font-size: 11.5px; line-height: 1.45; max-width: 72ch; }
+    .window-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 12px; }
+    .window-status-card { border: 1px solid var(--rule); border-radius: 0; background: var(--panel); padding: 12px; min-width: 0; }
+    .window-status-card.short { box-shadow: inset 2px 0 0 var(--measured); }
+    .window-status-card.weekly { box-shadow: inset 2px 0 0 var(--inferred); }
+    .window-status-card .window-percent { font: 700 20px/1.15 var(--mono); letter-spacing: -.02em; color: var(--ink); margin: 4px 0; }
+    .window-status-card .hint { color: var(--ink-3); font-size: 10.5px; line-height: 1.4; margin-top: 8px; }
+    .formula-note { margin-top: 12px; color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
 
-    /* every inferred figure wears the same two marks: amber, and a dash */
+    /* every inferred figure wears the same two marks: dimmed phosphor, and a dash */
     .inf {
-      display: inline-block; color: var(--inferred-text); font-family: var(--mono);
-      border-bottom: 1px dashed var(--inferred); padding-bottom: 1px;
+      display: inline-block; color: var(--inferred-text);
+      border-bottom: 1px dashed var(--inferred); padding-bottom:  1px;
     }
 
     /* the one sentence that states a conclusion rather than a quantity */
-    .verdict { margin: 14px 0 10px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
-    .verdict.alarm { color: var(--alarm); }
+    .verdict { margin: 16px 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0; }
+    .verdict.alarm { background: var(--accent); color: var(--paper); display: inline-block; padding: 4px 8px; }
+    .verdict.alarm::before { content: "! "; }
 
-    .legend-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 10.5px; color: var(--ink-3); align-items: center; }
+    .legend-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: 10.5px; color: var(--ink-3); align-items: center; }
     .key-solid, .key-dash, .key-line {
-      display: inline-block; width: 14px; height: 7px; margin-right: 6px; vertical-align: 0; border-radius: 1px;
+      display: inline-block; width: 14px; height: 7px; margin-right: 8px; vertical-align: 0; border-radius: 0;
     }
     .key-solid { background: var(--measured); }
     .key-solid.soft { background: var(--measured-soft); }
-    .key-dash { border: 1px dashed var(--inferred); background: var(--inferred-soft); }
-    .key-line { height: 0; border-top: 2px solid var(--ink); border-radius: 0; width: 16px; vertical-align: 3px; }
+    .key-dash { border: 1px dashed var(--inferred); background: repeating-linear-gradient(-45deg, transparent 0 3px, var(--hatch) 3px 4px); }
+    .key-line { height: 0; border-top: 2px solid var(--ink); width: 16px; vertical-align: 3px; }
     .key-line.dash { border-top-style: dashed; border-top-color: var(--inferred); }
 
-    .gauge { margin: 18px 0 10px; }
+    .gauge { margin: 20px 0 12px; }
     .track {
-      position: relative; height: 12px; border-radius: 2px; overflow: hidden;
-      background: var(--inferred-soft); border: 1px dashed var(--inferred);
-    }
-    .track::after {
-      content: ""; position: absolute; inset: 0; opacity: .32;
-      background-image: repeating-linear-gradient(-45deg, transparent 0 4px, var(--inferred) 4px 5px);
+      position: relative; height: 14px; overflow: hidden;
+      background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--hatch) 4px 5px);
+      border: 1px dashed var(--inferred);
     }
     .track.blank { background: transparent; }
-    .track.blank::after { display: none; }
-    .fill { position: relative; z-index: 1; height: 100%; background: var(--measured); transition: width .5s cubic-bezier(.22,.8,.3,1); }
-    .fill.hot { background: var(--alarm); }
-    .ticks { display: flex; justify-content: space-between; margin-top: 5px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+    .fill {
+      position: absolute; inset: 0; background: var(--measured);
+      transform: scaleX(var(--fill, 0)); transform-origin: 0 50%;
+      box-shadow: 0 0 12px var(--glow);
+      transition: transform .5s var(--ease-out);
+    }
+    .fill.hot { background: var(--ink); }
+    .ticks { display: flex; justify-content: space-between; margin-top: 4px; font-size: 9.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-    .readout { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
-    .readout b { color: var(--ink); font-weight: 600; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-    .readout .alarm, .readout .alarm b { color: var(--alarm); }
-    .readout.meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 11.5px; }
-    .why { margin-top: 10px; font-size: 12px; color: var(--ink-2); max-width: 68ch; line-height: 1.5; overflow-wrap: anywhere; }
+    .readout { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+    .readout b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .readout .alarm, .readout .alarm b { background: var(--accent); color: var(--paper); padding: 0 4px; }
+    .readout.meta { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 11.5px; }
+    .why { margin-top: 12px; font-size: 12px; color: var(--ink-3); max-width: 68ch; line-height: 1.5; overflow-wrap: anywhere; }
 
     .summary-cards {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
     }
     .summary-card {
-      background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
-      padding: 14px 15px 15px; min-width: 0; min-height: 100%;
+      background: var(--panel); border: 1px solid var(--rule); border-radius: 0;
+      padding: 16px; min-width: 0; min-height: 100%;
       display: flex; flex-direction: column; gap: 2px;
-      box-shadow: 0 1px 0 rgba(0,0,0,.02);
     }
-    .summary-card.primary { border-color: color-mix(in srgb, var(--measured) 28%, var(--rule)); }
-    .summary-card.infer { border-color: color-mix(in srgb, var(--inferred) 30%, var(--rule)); }
-    .summary-card .amount { font-size: 28px; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; margin-top: 2px; }
-    .summary-card .amount.small { font-size: 24px; }
-    .summary-card .hint { font-size: 11px; color: var(--ink-2); margin-top: auto; padding-top: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+    .summary-card.primary { border-color: var(--measured); }
+    .summary-card.infer { border-style: dashed; border-color: var(--inferred); }
+    .summary-card .amount { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; margin-top: 2px; }
+    .summary-card .amount.small { font-size: 22px; }
+    .summary-card .hint { font-size: 11px; color: var(--ink-3); margin-top: auto; padding-top: 8px; line-height: 1.4; overflow-wrap: anywhere; }
     .summary-card .eyebrow { white-space: normal; letter-spacing: .08em; line-height: 1.35; margin-bottom: 0; }
     @media (max-width: 720px) {
       .summary-cards { grid-template-columns: 1fr; }
@@ -2314,140 +2333,140 @@
 
     .stack-wrap { margin-top: 0; }
     .stack-bar {
-      display: flex; height: 14px; border-radius: 999px; overflow: hidden;
-      background: var(--rule); margin-top: 4px;
+      display: flex; height: 14px; border-radius: 0; overflow: hidden;
+      background: var(--panel-2); border: 1px solid var(--rule); margin-top: 4px;
     }
     .stack-seg { height: 100%; min-width: 0; }
     .stack-seg.window { background: var(--measured); }
     .stack-seg.natural { background: var(--measured-soft); }
-    .stack-seg.cards { background: var(--inferred); }
-    .stack-seg.credits { background: var(--ink-2); opacity: .5; }
+    .stack-seg.cards { background: repeating-linear-gradient(-45deg, var(--inferred) 0 3px, transparent 3px 6px); }
+    .stack-seg.credits { background: var(--ink-3); }
     .stack-keys {
-      display: grid; grid-template-columns: 1fr auto; gap: 6px 16px;
+      display: grid; grid-template-columns: 1fr auto; gap: 8px 16px;
       margin-top: 12px; font-size: 12px; color: var(--ink-2); align-items: baseline;
     }
     .stack-keys .row { display: contents; }
     .stack-keys .lab { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .stack-keys .val { font-family: var(--mono); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
-    .stack-keys i {
-      display: inline-block; width: 9px; height: 9px; border-radius: 2px; flex: none;
-    }
+    .stack-keys .val { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+    .stack-keys i { display: inline-block; width: 9px; height: 9px; border-radius: 0; flex: none; }
     .stack-keys .k-window { background: var(--measured); }
     .stack-keys .k-natural { background: var(--measured-soft); }
-    .stack-keys .k-cards { background: var(--inferred); }
-    .stack-keys .k-credits { background: var(--ink-2); opacity: .5; }
+    .stack-keys .k-cards { background: repeating-linear-gradient(-45deg, var(--inferred) 0 2px, transparent 2px 4px); }
+    .stack-keys .k-credits { background: var(--ink-3); }
     .stack-total-row {
       display: flex; justify-content: space-between; align-items: baseline;
-      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule);
+      margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule);
       font-size: 12px; color: var(--ink-2);
     }
-    .stack-total-row b { font-family: var(--mono); font-size: 15px; color: var(--ink); font-weight: 620; }
+    .stack-total-row b { font-size: 15px; color: var(--ink); font-weight: 700; }
 
     .forecast { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 4px; }
     .forecast > div { flex: 1 1 230px; min-width: 0; }
     .cost-input {
-      font: inherit; font-family: var(--mono); font-size: 14px; width: 92px;
-      padding: 4px 8px; border: 1px solid var(--rule); border-radius: 4px;
+      font: inherit; font-size: 14px; width: 92px;
+      padding: 4px 8px; border: 1px solid var(--rule); border-radius: 0;
       background: var(--panel); color: var(--ink);
     }
-    .cost-input:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
-    .cost-line { align-items: center; gap: 4px 6px; }
-    .cost-line .cost-input { width: 64px; padding: 2px 6px; font-size: 12px; }
-    .cost-currency { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+    .cost-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .cost-line { align-items: center; gap: 4px 8px; }
+    .cost-line .cost-input { width: 64px; padding: 4px 8px; font-size: 12px; }
+    .cost-currency { font-variant-numeric: tabular-nums; color: var(--ink); }
 
-    .mem-foot { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
+    .mem-foot { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 16px; }
     .mem-note { margin: 0; font-size: 11px; color: var(--ink-3); max-width: 52ch; line-height: 1.5; }
     .mem-clear {
-      font: inherit; font-size: 11px; padding: 5px 11px; border-radius: 5px; cursor: pointer;
+      font: inherit; font-size: 11px; padding:noise 8px 12px; border-radius: 0; cursor: pointer;
       border: 1px solid var(--rule); background: var(--panel); color: var(--ink-2);
     }
-    .mem-clear:hover { color: var(--alarm); border-color: color-mix(in srgb, var(--alarm) 40%, var(--rule)); }
-    .mem-clear:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
+    .mem-clear:hover { color: var(--ink); border-color: var(--accent); }
+    .mem-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
     /* hairlines drawn per cell, not by letting a grid gap show through: a partly filled
        last row would otherwise leave a slab of rule colour in the empty tracks */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
-    .cell { background: var(--paper); padding: 12px 14px; box-shadow: -1px -1px 0 0 var(--rule); }
-    .cell .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
-    .cell .v { font-family: var(--mono); font-size: 17px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
-    .cell .s { font-size: 11px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: 0; overflow: hidden; }
+    .cell { background: var(--panel); padding: 12px 16px; box-shadow: -1px -1px 0 0 var(--rule); }
+    .cell .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+    .cell .v { font-size: 17px; font-weight: 700; letter-spacing: -.01em; margin-top: 4px; font-variant-numeric: tabular-nums; color: var(--ink); }
+    .cell .s { font-size: 11px; color: var(--ink-3); margin-top: 2px; line-height: 1.35; }
 
-    h2 { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; margin: 0 0 10px; color: var(--ink); line-height: 1.3; }
-    h2 em { font-style: normal; font-weight: 400; letter-spacing: .01em; text-transform: none; color: var(--ink-3); margin-left: 8px; font-size: 11.5px; }
+    h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; margin: 0 0 12px; color: var(--ink); line-height: 1.3; text-wrap: balance; }
+    h2::before { content: "$ "; color: var(--accent); }
+    h2 em { font-style: normal; font-weight: 400; letter-spacing: .01em; text-transform: none; color: var(--ink-3); margin-left: 8px; font-size: 11px; }
 
     /* hairline separators so segments stay legible against paper in either theme */
-    .bars { display: flex; height: 26px; border-radius: 4px; overflow: hidden; border: 1px solid var(--rule); }
+    .bars { display: flex; height: 26px; border-radius: 0; overflow: hidden; border: 1px solid var(--rule); }
     .bars > div { min-width: 0; }
     .bars > div + div { box-shadow: inset 1px 0 0 var(--paper); }
-    .keys { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
-    .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-    .keys b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+    .keys { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
+    .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 0; margin-right: 8px; vertical-align: -1px; }
+    .keys b { color: var(--ink); font-weight: 700; }
 
-    .scroll { border: 1px solid var(--rule); border-radius: 8px; overflow: auto; max-height: 280px; background: var(--panel); }
+    .scroll { border: 1px solid var(--rule); border-radius: 0; overflow: auto; max-height: 280px; background: var(--panel); }
     table { border-collapse: collapse; width: 100%; font-size: 12px; }
-    th { position: sticky; top: 0; background: var(--panel); text-align: left; z-index: 1; padding: 8px 12px; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--rule); }
+    th { position: sticky; top: 0; background: var(--panel-2); text-align: left; z-index: 1; padding: 8px 12px; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--rule); }
     td { padding: 8px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
     tr:last-child td { border-bottom: 0; }
-    .n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-    .n.strong { font-weight: 600; }
+    .n { text-align: right; font-variant-numeric: tabular-nums; }
+    .n.strong { font-weight: 700; color: var(--ink); }
     .cyc-note { color: var(--ink-3); font-size: 11px; }
-    tr.cyc-now td { background: color-mix(in srgb, var(--measured) 8%, transparent); }
+    tr.cyc-now td { background: var(--panel-2); }
     tr.cyc-now td:first-child { box-shadow: inset 2px 0 0 var(--measured); }
-    tr.cyc-ahead td { color: var(--ink-2); }
+    tr.cyc-ahead td { color: var(--ink-3); }
     tr.cyc-total td { border-top: 1px solid var(--ink-3); border-bottom: 0; }
-    @media (prefers-color-scheme: dark) {
-      tr.cyc-now td { background: color-mix(in srgb, var(--measured) 16%, transparent); }
-    }
 
-    .notes { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
-    .notes h3 { font-size: 10px; letter-spacing: .15em; text-transform: uppercase; font-weight: 700; margin: 0 0 8px; color: var(--ink-2); }
+    .notes { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--rule); }
+    .notes h3 { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; margin: 0 0 8px; color: var(--ink-3); }
+    .notes h3::before { content: "$ "; color: var(--accent); }
     .notes ul { margin: 0; padding: 0; list-style: none; }
-    .notes li { position: relative; padding-left: 16px; margin-bottom: 6px; font-size: 11.5px; line-height: 1.6; color: var(--ink-2); }
-    .notes li::before { content: ""; position: absolute; left: 0; top: 8px; width: 8px; height: 1px; background: var(--ink-3); }
-    .notes li.warn { color: var(--inferred); }
-    .notes li.warn::before { background: var(--inferred); }
+    .notes li { position: relative; padding-left: 16px; margin-bottom: 8px; font-size: 11.5px; line-height: 1.6; color: var(--ink-2); }
+    .notes li::before { content: ">"; position: absolute; left: 2px; color: var(--ink-3); }
+    .notes li.warn { color: var(--ink); }
+    .notes li.warn::before { content: "!"; color: var(--accent); font-weight: 700; }
 
     .chart { margin-top: 0; }
     .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
     .chart .axis { stroke: var(--rule); stroke-width: 1; }
-    .chart text { font-family: var(--sans); font-size: 10px; fill: var(--ink-3); }
+    .chart text { font-family: var(--mono); font-size: 10px; fill: var(--ink-3); }
     .chart .muted { font-size: 9px; }
-    .chart .label-strong { fill: var(--ink); font-weight: 600; }
+    .chart .label-strong { fill: var(--ink-2); font-weight: 700; }
     details { margin-top: 12px; }
-    summary { color: var(--ink-2); cursor: pointer; font-size: 12px; }
+    summary { color: var(--ink-3); cursor: pointer; font-size: 12px; }
+    summary:hover { color: var(--ink); }
     details .scroll { margin-top: 8px; }
 
     .status { padding: 56px 20px; text-align: center; color: var(--ink-2); }
-    .status.bad { color: var(--alarm); text-align: left; white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; }
-    .status .hint { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
+    .status.bad { background: var(--accent); color: var(--paper); text-align: left; white-space: pre-wrap; font-size: 11.5px; padding: 12px 16px; }
+    .status .hint { color: var(--ink-3); font-size: 12px; margin-top: 8px; }
 
     .subscription-picker {
-      border: 1px solid color-mix(in srgb, var(--inferred) 38%, var(--rule));
-      border-radius: 8px; background: var(--panel); padding: 16px; margin-bottom: 22px;
+      border: 1px dashed var(--inferred);
+      border-radius: 0; background: var(--panel); padding: 16px; margin-bottom: 24px;
     }
-    .subscription-picker h2 { font-size: 13px; letter-spacing: -.01em; text-transform: none; margin-bottom: 5px; }
+    .subscription-picker h2 { font-size: 12px; letter-spacing: .02em; text-transform: none; margin-bottom: 4px; }
+    .subscription-picker h2::before { content: "? "; }
     .subscription-picker p { color: var(--ink-2); font-size: 11.5px; margin: 0; max-width: 70ch; }
-    .subscription-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .subscription-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .subscription-option {
-      font: inherit; min-width: 170px; padding: 9px 11px; text-align: left; cursor: pointer;
-      color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 6px;
+      font: inherit; min-width: 170px; padding: 8px 12px; text-align: left; cursor: pointer;
+      color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 0;
     }
-    .subscription-option:hover { border-color: var(--measured); }
-    .subscription-option:focus-visible { outline: 2px solid var(--measured); outline-offset: 1px; }
-    .subscription-option strong { display: block; font-size: 12px; font-weight: 650; }
-    .subscription-option span { display: block; color: var(--ink-3); font: 10.5px var(--mono); margin-top: 2px; }
+    .subscription-option:hover { border-color: var(--accent); }
+    .subscription-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .subscription-option strong { display: block; font-size: 12px; font-weight: 700; }
+    .subscription-option span { display: block; color: var(--ink-3); font-size: 10.5px; margin-top: 2px; }
     .subscription-picked {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      color: var(--ink-2); font-size: 11.5px; margin-bottom: 18px;
+      color: var(--ink-2); font-size: 11.5px; margin-bottom: 20px;
     }
 
     @media (max-width: 620px) {
       .amount { font-size: 30px; }
-      .sheet { padding: 16px 16px 22px; }
+      .sheet { padding: 16px 16px 24px; }
       .summary-card .amount { font-size: 24px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .fill, .trigger { transition: none; }
+      .cursor::after { animation: none; }
     }
   `;
 
@@ -2585,7 +2604,7 @@
                  ? L.gaugeAria(usd(r.s.credits), usd(r.ceiling), allowanceMeasured)
                  : L.noCeiling(Math.round(r.used)),
              )}">
-          <div class="fill ${ratio > 0.8 ? "hot" : ""}" style="width:${r.ceiling ? (ratio * 100).toFixed(1) : 0}%"></div>
+          <div class="fill ${ratio > 0.8 ? "hot" : ""}" style="--fill:${r.ceiling ? ratio.toFixed(3) : 0}"></div>
         </div>
         <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span></div>
         <div class="legend-key">
@@ -3204,7 +3223,7 @@
           usd(value),
         ].join(" · ");
         return `<rect x="${(x1 + gap / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
-          fill="${fill}" rx="4"><title>${esc(tip)}</title></rect>`;
+          fill="${fill}" rx="0"><title>${esc(tip)}</title></rect>`;
       })
       .join("");
 
@@ -3294,7 +3313,7 @@
         const title = unreported
           ? `${key} — ${L.todayMissing}`
           : `${key} ${usd(value)}${key === today ? ` — ${L.partialDay}` : ""}`;
-        return `<rect x="${left + i * slot + 1}" y="${y(value)}" width="${barWidth}" height="${barHeight}" rx="4" fill="var(--measured)"${key === today ? ' opacity=".45"' : ""}><title>${esc(title)}</title></rect>`;
+        return `<rect x="${left + i * slot + 1}" y="${y(value)}" width="${barWidth}" height="${barHeight}" rx="0" fill="var(--measured)"${key === today ? ' opacity=".45"' : ""}><title>${esc(title)}</title></rect>`;
       })
       .join("");
     const reference = rate
@@ -3332,7 +3351,7 @@
         const perTurn = m.turns ? usd(m.credits / m.turns) : "—";
         const name = modelName(m.name);
         return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
-          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
+          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="0" fill="var(--measured)"><title>${esc(`${name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
           <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(m.credits))}</text>
           <text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>`;
       })
@@ -3388,7 +3407,7 @@
         const name = surfaceName(row.name);
         const perTurn = row.turns ? usd(row.credits / row.turns) : "";
         return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
-          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="4" fill="var(--measured)"><title>${esc(`${name} · ${usd(row.credits)}`)}</title></rect>
+          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="0" fill="var(--measured)"><title>${esc(`${name} · ${usd(row.credits)}`)}</title></rect>
           <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(row.credits))}</text>
           ${perTurn ? `<text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>` : ""}`;
       })
@@ -3623,11 +3642,9 @@
     const L = t();
     return `
       <button class="trigger ${state.loading ? "busy" : ""}" title="${esc(`${L.openPanel} · v${scriptVersion()}`)}">
-        <span class="trigger-mark"></span>
-        <span class="trigger-body">
-          <span class="trigger-kicker">Codex</span>
-          <span class="trigger-name">${state.loading ? esc(L.loading) : esc(L.brand)}</span>
-        </span>
+        <span class="trigger-ps">$</span>
+        <span class="trigger-name">${state.loading ? esc(L.loading) : esc(L.brand)}</span>
+        <span class="cursor"></span>
       </button>
     `;
   }
@@ -3757,7 +3774,7 @@
               <div class="panel" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(L.title)}">
                 <div class="masthead">
                   <div>
-                    <div class="wordmark">${esc(L.title)} <em>${esc(L.from)}</em></div>
+                    <div class="wordmark">${esc(L.title)} <em>${esc(L.from)}</em><span class="cursor"></span></div>
                     <div class="subhead">${state.win ? `${esc(windowLabel())} · ` : ""}<span class="version">v${esc(scriptVersion())}</span></div>
                   </div>
                   <span class="grow"></span>
