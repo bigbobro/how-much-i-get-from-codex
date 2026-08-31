@@ -338,8 +338,6 @@
 
       byDay: "By day",
       byModel: "By model",
-      bySurface: "By surface",
-      thSurface: "Surface",
       surfaceCli: "CLI",
       surfaceVscode: "VS Code",
       surfaceWeb: "Web",
@@ -606,8 +604,6 @@
 
       byDay: "每日明细",
       byModel: "按模型",
-      bySurface: "按入口",
-      thSurface: "入口",
       surfaceCli: "CLI",
       surfaceVscode: "VS Code",
       surfaceWeb: "网页",
@@ -3512,30 +3508,6 @@
         <h2>${esc(L.chartModel)}</h2>
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartModel)}">${marks}</svg>
       </div>
-    `;
-  }
-
-  function surfaceTableHtml(s) {
-    const L = t();
-    const rows = [...s.surfaces.values()].filter((row) => row.credits > 0).sort((a, b) => b.credits - a.credits);
-    return `
-      <div class="scroll" tabindex="0" role="region" aria-label="${esc(L.bySurface)}"><table>
-        <thead><tr>
-          <th>${esc(L.thSurface)}</th><th class="n">${esc(L.thCost)}</th><th class="n">${esc(L.thShare)}</th>
-          <th class="n">${esc(L.thTurns)}</th><th class="n">${esc(L.thPerTurn)}</th>
-        </tr></thead>
-        <tbody>${rows
-          .map(
-            (row) => `<tr>
-              <td>${esc(surfaceName(row.name))}</td>
-              <td class="n strong">${usd(row.credits)}</td>
-              <td class="n">${pct(row.credits / (s.credits || 1))}</td>
-              <td class="n">${row.turns ? esc(turnCount(row.turns)) : "—"}</td>
-              <td class="n">${row.turns ? usd(row.credits / row.turns) : "—"}</td>
-            </tr>`,
-          )
-          .join("")}</tbody>
-      </table></div>
     `;
   }
 
