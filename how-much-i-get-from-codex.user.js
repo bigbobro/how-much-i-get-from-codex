@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      4.1.0
+// @version      4.1.1
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "4.1.0";
+  const SCRIPT_VERSION = "4.1.1";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -2210,11 +2210,14 @@
     * { box-sizing: border-box; }
     
     .trigger {
-      appearance: none;
-      display: inline-flex;
+      position: fixed;
+      top: 66vh;
+      right: 18px;
+      z-index: 2147483646;
+      display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
+      gap: 8px;
+      padding: 8px 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--bg-panel);
@@ -2223,12 +2226,17 @@
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
       transition: background 140ms ease-out, border-color 140ms ease-out, transform 140ms ease-out;
     }
-    .trigger:hover { background: var(--bg-raised); border-color: var(--line-strong); }
+    .trigger:hover { background: var(--bg-raised); border-color: var(--color-accent); color: var(--ink); transform: translateY(-1px); }
+    .trigger:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
     .trigger:active { transform: translateY(1px); }
     .trigger.busy { opacity: 0.7; cursor: wait; }
+    .trigger.busy .trigger-name { color: var(--ink-dim); }
+    .trigger-ps { color: var(--color-accent); font-family: var(--mono); font-weight: 700; }
+    .cursor::after { content: "▮"; color: var(--color-accent); font-family: var(--mono); animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
     
     .scrim {
       position: fixed;
