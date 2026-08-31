@@ -11,7 +11,7 @@ denominator beside either one. This reads both windows and keeps their meanings 
 
 ![](docs/panel.jpg)
 
-<sub>A dark terminal readout: measured figures in bright phosphor, inferred ones hatched.</sub>
+<sub>A clean, high-density dark instrument panel (Mosaic Tiles) in OKLCH sage palette: measured figures in solid sage, inferred ones hatched, with dual-view time-series charts and drill-down audit ledger.</sub>
 
 For anyone on Plus, Pro, Business or Team who uses Codex enough to wonder what the
 subscription is really worth.
@@ -25,9 +25,10 @@ running after you close it.
 
 - What one allowance is worth, and how many you have used
 - What is left in the current window, and when the API resets it
-- How much more opens before your subscription renews
-- What a turn costs, and what a thousand lines of code costs
+- How much more opens before your subscription renews (full grants)
+- What a turn costs, what 1,000 lines of code cost, and cache hit rates
 - Which day, which model, and which surface took the most
+- **Interactive Master Ledger**: Daily breakdown with row-level model drill-down, global model allocation, and full calculation parameter audits
 
 ---
 
