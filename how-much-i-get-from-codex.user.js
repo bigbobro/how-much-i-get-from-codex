@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      4.0.0
+// @version      4.1.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "4.0.0";
+  const SCRIPT_VERSION = "4.1.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -263,6 +263,18 @@
       chartSurfaceSubTurns: "no surface shares from the API — split by each surface's share of turns",
       unattributed: "Unattributed",
       seeNumbers: "See the numbers",
+      ledgerBadge: "Daily · Models · Params",
+      subTabDaily: "Daily Breakdown",
+      subTabModels: "Model Split",
+      subTabParams: "Calculation Params",
+      paramCalibration: "7-Day Basis",
+      paramUsedPct: "Window Used Ratio",
+      paramLeftPct: "Window Unused Ratio",
+      paramLeftCredits: "Window Remaining",
+      paramThrottle: "5-Hour Throttle Cap",
+      paramFutureWindows: "Future Windows",
+      paramUntilRenewal: "Remaining Grant Capacity",
+      paramResetIn: "Reset Time Left",
       today: "today",
       partialDay: "today is still filling — this bar will grow",
 
