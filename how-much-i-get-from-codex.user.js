@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      4.1.1
+// @version      4.1.2
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "4.1.1";
+  const SCRIPT_VERSION = "4.1.2";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -2465,16 +2465,25 @@
     .split-bar .b { background: var(--seg-a); }
     .split-bar .c { background: var(--seg-c); }
     
-    /* Charts */
+    /* Charts & SVG */
     .chart {
       padding: 16px;
       background: var(--bg-tile);
       border: 1px solid var(--line);
       border-radius: 12px;
     }
-    .section-head h2 { margin: 0 0 12px; font-size: 12.5px; font-weight: 600; }
-    .section-head em { font-style: normal; font-weight: normal; color: var(--ink-faint); font-size: 11px; margin-left: 8px; }
+    .chart h2, .section-head h2 { margin: 0 0 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+    .chart h2 em, .section-head em { font-style: normal; font-weight: normal; color: var(--ink-faint); font-size: 11px; margin-left: 8px; }
     .chart svg { display: block; width: 100%; height: auto; }
+    svg text {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      fill: var(--ink-dim);
+    }
+    .chart text { fill: var(--ink-dim); }
+    .chart .label-strong, text.label-strong { fill: var(--ink); font-weight: 600; font-size: 11.5px; }
+    .chart .muted, text.muted { fill: var(--ink-faint); font-size: 10px; }
+    .chart line.axis { stroke: var(--line-strong); }
     
     /* Tables & Scroll */
     .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-tile); }
@@ -3473,7 +3482,6 @@
           <text x="${left}" y="${height - 5}">${esc(shortDate(keys[0]))}</text>
           <text x="${width - right}" y="${height - 5}" text-anchor="end">${esc(shortDate(keys[keys.length - 1]))}</text>
         </svg>
-        <details><summary>${esc(L.seeNumbers)}</summary>${dayTableHtml(days)}</details>
       </div>
     `;
   }
@@ -3503,7 +3511,6 @@
       <div class="chart">
         <h2>${esc(L.chartModel)}</h2>
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartModel)}">${marks}</svg>
-        <details><summary>${esc(L.seeNumbers)}</summary>${modelTableHtml(s)}</details>
       </div>
     `;
   }
@@ -3559,7 +3566,6 @@
       <div class="chart">
         <h2>${esc(L.chartSurface)}<em>${esc(byTurns ? L.chartSurfaceSubTurns : L.chartSurfaceSub)}</em></h2>
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartSurface)}">${marks}</svg>
-        <details><summary>${esc(L.seeNumbers)}</summary>${surfaceTableHtml(s)}</details>
       </div>
     `;
   }
