@@ -14,9 +14,13 @@ This panel works it out.
 - Which day, which model and which surface ate the most
 
 The desktop panel keeps quota status at the top and the billing-period summary below it.
-Switch **Current window / This subscription** within usage analysis to update its subtotal,
-metrics, four aligned charts and usage details together. The quota status, subscription-cost
-input and billing summary stay in place. Forecast calculations and window history expand below.
+The 7D allowance and subscription-capacity charts are visible below the summary: solid
+lines show cumulative spend, dashed lines connect to their allowance estimates. The
+subscription chart uses the same 7D estimate. These are capacity projections, not daily
+spending forecasts. Usage analysis follows the real billing period, falling back to a valid
+current window when billing dates are unavailable. A visible reminder explains that credit
+statistics can lag behind the remaining percentage after heavy usage, understating both
+estimates. Calculations and window history expand below.
 
 ### How
 

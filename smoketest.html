@@ -13,7 +13,8 @@ the real script would never have fetched.</p>
       Expect <b>$249.83 spent / $250.00 ceiling</b>. This is the regression test that matters.</li>
   <li><a href="#multi">#multi</a> — 7-day window, renewal 24 days out. One completed cycle shows; the older
       rows are correctly clipped away as never-fetched. Exercises the weekly-capacity basis and the multi-opening projection.</li>
-  <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Billing analysis stays available; current-window analysis is empty.</li>
+  <li><a href="#fresh">#fresh</a> — cycle just reset, 0% used. Billing analysis stays available after the window resets.</li>
+  <li><a href="#freshweek">#freshweek</a> — a weekly window just reset; its chart shows $0 measured and withholds the unknown allowance line.</li>
   <li><a href="#fast">#fast</a> — fast-mode rows, including a model with no published multiplier.</li>
   <li><a href="#boundary">#boundary</a> — windows open at 06:00 UTC, spend sits on days two
       segments compete for. Segment totals must not exceed the total spend.</li>
@@ -60,7 +61,7 @@ the real script would never have fetched.</p>
       $14.20, $1.42 and $16.25 respectively, $31.87 total.</li>
   <li><a href="#projection">#projection</a> — a placeholder window with five active days in the
       billing period. It must show the measured $494.66 and the $70.67 calendar-day average,
-      disable synthetic-window analysis, and show no uncapped period projection.</li>
+      omit synthetic-window analysis, and show no uncapped period projection.</li>
   <li><a href="#projectionnoent">#projectionnoent</a> — the same placeholder with unavailable
       billing information. Retain live quota status without inventing an analysis date range or subtotal.</li>
   <li><a href="#surfaces">#surfaces</a> — one metered day split 50 / 30 / 20 across CLI, VS Code
@@ -181,8 +182,8 @@ if (MODE === "multi") {
     { at: NOON -  4 * DAY, k: 0.44, turns: 19, threads: 4 },
     { at: NOON -  1 * DAY, k: 0.26, turns: 10, threads: 2 },
   ];
-} else if (MODE === "fresh") {
-  WINDOW_SEC = 2628000;
+} else if (MODE === "fresh" || MODE === "freshweek") {
+  WINDOW_SEC = MODE === "freshweek" ? 7 * 86400 : 2628000;
   // A real opening five minutes ago, outside the sliding-placeholder detection interval.
   WINDOW_START = Math.floor((NOW - 5 * 60000) / 1000);
   USED_PERCENT = 0;
@@ -650,7 +651,7 @@ if (MODE === "zerobasis") {
 <script>document.write(`<script src="how-much-i-get-from-codex.user.js?smoke=${performance.timeOrigin}"><\/script>`);</script>
 <script>
 const ALL_MODES = [
-  "default", "multi", "fresh", "fast", "boundary", "personal", "spill",
+  "default", "multi", "fresh", "freshweek", "fast", "boundary", "personal", "spill",
   "unknownmodel", "mixedunknown", "changed", "conflict", "depleted", "bank", "unusedcard", "twosubs",
   "sameworkspaces", "samepersonals", "noent", "currentspill", "zerobasis", "rates", "projection", "projectionnoent",
   "surfaces", "dual", "thinweek", "thinprev",
@@ -673,15 +674,6 @@ async function openPanel(doc = document) {
   throw new Error("panel did not finish loading");
 }
 
-async function chooseView(root, view) {
-  const button = root.querySelector(`.analysis-section [data-view="${view}"]`);
-  if (!button || button.disabled) throw new Error(`analysis scope ${view} is unavailable`);
-  button.focus();
-  button.click();
-  await wait(0);
-  return document.getElementById("how-much-i-get").shadowRoot;
-}
-
 async function runScenarioAssertions() {
   const failures = [];
   const expect = (label, pass, detail = "") => {
@@ -693,12 +685,33 @@ async function runScenarioAssertions() {
     let text = root.querySelector(".panel")?.innerText || "";
     const rawText = root.querySelector(".panel")?.textContent || "";
     expect("no NaN or undefined", !/NaN|undefined/.test(rawText));
+    expect("analysis has no range selector", !root.querySelector("[data-view], .view-tabs"));
+    const delayNote = root.querySelector(".usage-delay");
+    expect("usage delay reminder is visible by default", delayNote?.checkVisibility() && !delayNote.closest("details"));
+    expect("usage delay reminder explains recent consumption and both estimates", /recent consumption.*not be included.*7D and subscription-period/i.test(delayNote?.textContent || ""));
+    if (DAYS.some(d => utcDay(d.at) === utcDay(NOW))) {
+      expect("today's row does not hide the reporting delay reminder", delayNote?.checkVisibility());
+    }
+    const firstEstimate = root.querySelector(".subscription-summary, .forecast-grid, .analysis-section");
+    expect("delay reminder precedes the estimates", !!(delayNote?.compareDocumentPosition(firstEstimate) & Node.DOCUMENT_POSITION_FOLLOWING));
     expect("seven expected requests", window.__calls.length === 7, window.__calls.join(", "));
     expect("no userscript console errors", window.__consoleErrors.length === 0, window.__consoleErrors.join("\n"));
     const panelBounds = root.querySelector(".panel").getBoundingClientRect();
     const sheet = root.querySelector(".sheet");
     expect("dialog fits viewport", panelBounds.left >= 0 && panelBounds.right <= innerWidth + 1 && panelBounds.top >= 0 && panelBounds.bottom <= innerHeight + 1);
     expect("only charts and tables scroll sideways", sheet.scrollWidth <= sheet.clientWidth + 1, `${sheet.scrollWidth} > ${sheet.clientWidth}`);
+
+    for (const chart of root.querySelectorAll(".capacity-chart")) {
+      expect("forecast is visible without expanding details", chart.checkVisibility() && !chart.closest("details"));
+      const line = chart.querySelector(".capacity-projection");
+      if (line) {
+        const points = chart.querySelector("polyline").getAttribute("points").trim().split(/\s+/);
+        const [x, y] = points.at(-1).split(",").map(Number);
+        expect("forecast joins measured endpoint", Number(line.getAttribute("x1")) === x && Number(line.getAttribute("y1")) === y);
+        expect("forecast runs toward reset or renewal", Number(line.getAttribute("x2")) > x);
+        expect("forecast is visibly dashed", !!line.getAttribute("stroke-dasharray"));
+      }
+    }
 
     if (MODE === "default") {
       expect("default spend", text.includes("$249.83"));
@@ -709,11 +722,7 @@ async function runScenarioAssertions() {
       expect("cycle source is inferred", root.querySelector(".gauge-head")?.innerText.includes("INFERRED · CEILING"));
       const source = root.querySelector(".gauge-head .right");
       expect("inferred source remains accessible text", source?.checkVisibility() && !source.closest('[aria-hidden="true"]') && /inferred/i.test(source.textContent));
-      expect("known billing defaults to period analysis", root.querySelector('[data-view="period"]')?.getAttribute("aria-pressed") === "true");
-      root = await chooseView(root, "cycle");
-      expect("scope switch keeps focus", root.activeElement?.dataset.view === "cycle");
-      root = await chooseView(root, "period");
-      expect("return scope switch keeps focus", root.activeElement?.dataset.view === "period");
+      expect("known billing uses period analysis", root.querySelector(".analysis-section")?.dataset.scope === "period");
       expect("future capacity remains labelled inferred", /inferred/i.test(root.querySelector(".subscription-summary .infer .eyebrow")?.textContent || ""));
       expect("forecast details start folded", root.querySelector(".forecast-details")?.open === false);
       const zh = root.querySelector('[data-lang="zh"]');
@@ -722,6 +731,7 @@ async function runScenarioAssertions() {
       await wait(0);
       root = document.getElementById("how-much-i-get").shadowRoot;
       expect("language switch keeps focus", root.activeElement?.dataset.lang === "zh");
+      expect("Chinese delay reminder is translated", root.querySelector(".usage-delay")?.textContent.includes("刚发生的消耗可能尚未计入"));
       root.querySelector('[data-lang="en"]').click();
       await wait(0);
       root = document.getElementById("how-much-i-get").shadowRoot;
@@ -753,8 +763,8 @@ async function runScenarioAssertions() {
     }
 
     if (["noent", "sameworkspaces", "samepersonals"].includes(MODE)) {
-      expect("unknown billing defaults to current-window analysis", root.querySelector('[data-view="cycle"]')?.getAttribute("aria-pressed") === "true");
-      expect("unknown billing disables period analysis", root.querySelector('[data-view="period"]')?.disabled === true);
+      expect("unknown billing defaults to current-window analysis", root.querySelector(".analysis-section")?.dataset.scope === "cycle");
+      expect("unknown billing has no subscription projection", !root.querySelector('[data-forecast="period"]'));
       expect("unknown billing has no fabricated summary", root.querySelector(".subscription-summary") == null);
       expect("unknown billing retains measured analysis", Number((root.querySelector(".analysis-subtotal")?.textContent || "").replace(/[^0-9.]/g, "")) > 0);
       expect("unknown billing retains chart and ledger", !!root.querySelector(".analysis-section .chart") && !!root.querySelector(".analysis-section .master-ledger"));
@@ -768,17 +778,11 @@ async function runScenarioAssertions() {
       await wait(0);
       root = document.getElementById("how-much-i-get").shadowRoot;
       expect("saved price uses measured billing payback", root.querySelector(".subscription-summary .payback .amount")?.textContent === "1.7×");
-      const fixedSummary = root.querySelector(".subscription-summary")?.textContent;
-      const fixedQuota = root.querySelector(".window-status")?.outerHTML;
-      const fixedPrice = root.querySelector(".cost-input")?.value;
       const money = (value) => Number((value || "").replace(/[^0-9.-]/g, ""));
       const assertScope = (scope, expected, dates, turns) => {
         const analysis = root.querySelector(".analysis-section");
         expect(`${scope}: fixed billing spend`, root.querySelector(".subscription-summary .amount")?.textContent === "$209.57");
-        expect(`${scope}: billing summary stays unchanged`, root.querySelector(".subscription-summary")?.textContent === fixedSummary);
-        expect(`${scope}: price stays unchanged`, root.querySelector(".cost-input")?.value === fixedPrice);
-        expect(`${scope}: quota status and accessible readings stay unchanged`, root.querySelector(".window-status")?.outerHTML === fixedQuota);
-        expect(`${scope}: scope is selected`, analysis.querySelector(`[data-view="${scope}"]`)?.getAttribute("aria-pressed") === "true");
+        expect(`${scope}: analysis uses billing period`, analysis.dataset.scope === scope);
         expect(`${scope}: analysis subtotal`, Math.abs(money(analysis.querySelector(".analysis-subtotal")?.textContent) - expected) < 0.01);
         const from = scope === "period" ? "2026-07-21" : "2026-08-08";
         const range = analysis.querySelector(".view-range")?.textContent || "";
@@ -809,26 +813,19 @@ async function runScenarioAssertions() {
         expect(`${scope}: token breakdown reconciles to subtotal`, Math.abs(tokenTotal - expected) < 0.03, String(tokenTotal));
       };
       assertScope("period", 209.57, ["2026-07-23", "2026-07-29", "2026-08-05", "2026-08-09"], 75);
-      root = await chooseView(root, "cycle");
-      assertScope("cycle", 29.94, ["2026-08-09"], 12);
-      root = await chooseView(root, "period");
-      assertScope("period", 209.57, ["2026-07-23", "2026-07-29", "2026-08-05", "2026-08-09"], 75);
-      expect("scope switches do not refetch or alter request count", window.__calls.length === 7);
     }
 
-    if (MODE === "fresh") {
-      const summary = root.querySelector(".subscription-summary")?.textContent;
-      const quota = root.querySelector(".window-status")?.outerHTML;
-      expect("reset keeps billing analysis as default", root.querySelector('[data-view="period"]')?.getAttribute("aria-pressed") === "true");
+    if (MODE === "fresh" || MODE === "freshweek") {
+      expect("reset keeps billing analysis", root.querySelector(".analysis-section")?.dataset.scope === "period");
       expect("reset retains measured billing spend", root.querySelector(".subscription-summary .amount")?.textContent === "$249.83");
-      root = await chooseView(root, "cycle");
-      expect("empty current window has zero analysis spend", root.querySelector(".analysis-subtotal")?.textContent.includes("$0.00"));
-      expect("empty current window explains missing usage", !!root.querySelector(".analysis-section .status"));
-      expect("empty current window has no stale charts or ledger", !root.querySelector(".analysis-section .chart, .analysis-section .master-ledger"));
-      expect("empty analysis keeps billing summary", root.querySelector(".subscription-summary")?.textContent === summary);
-      expect("empty analysis keeps quota status", root.querySelector(".window-status")?.outerHTML === quota);
-      root = await chooseView(root, "period");
-      expect("billing analysis returns after empty current window", !!root.querySelector(".analysis-section .chart") && root.querySelector(".analysis-subtotal")?.textContent.includes("$249.83"));
+      expect("reset retains billing charts and ledger", !!root.querySelector(".analysis-section .chart") && !!root.querySelector(".analysis-section .master-ledger"));
+      expect("reset analysis retains measured subtotal", root.querySelector(".analysis-subtotal")?.textContent === "$249.83");
+      if (MODE === "freshweek") {
+        const weekly = root.querySelector('[data-forecast="weekly"]');
+        expect("fresh week shows measured zero", weekly?.querySelector("polyline title")?.textContent.includes("$0.00"));
+        expect("fresh week has no invented prediction", !weekly?.querySelector(".capacity-projection"));
+        expect("fresh week explains absent estimate", /no dollar figure/i.test(weekly?.textContent || ""));
+      }
     }
 
     if (MODE === "changed") {
@@ -900,7 +897,6 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "spill" || MODE === "currentspill") {
-      root = await chooseView(root, "period");
       root.querySelector(".forecast-details").open = true;
       const expected = MODE === "spill" ? "$209.57" : "$149.90";
       const headline = root.querySelector(".subscription-summary")?.innerText || "";
@@ -912,7 +908,6 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "unusedcard") {
-      root = await chooseView(root, "period");
       root.querySelector(".forecast-details").open = true;
       text = root.querySelector(".panel")?.innerText || "";
       expect("unused card is not spent", !text.includes("used this billing period"));
@@ -940,6 +935,8 @@ async function runScenarioAssertions() {
       expect("chosen subscription refetches its period", window.__calls.length === 14, window.__calls.join(", "));
       expect("chosen subscription spans 07-18 to 08-18", text.includes("2026-07-18 → 2026-08-18"), text.slice(0, 1000));
       expect("chosen period includes July spend", root.querySelector(".subscription-summary")?.innerText.includes("$79.83"), root.querySelector(".subscription-summary")?.innerText || "");
+      expect("subscription selection switches analysis to billing period", root.querySelector(".analysis-section")?.dataset.scope === "period");
+      expect("subscription selection reconciles analysis with summary", root.querySelector(".analysis-subtotal")?.textContent === "$79.83");
       expect("choice removes ambiguity prompt", root.querySelectorAll("[data-subscription-choice]").length === 0);
     }
 
@@ -954,18 +951,18 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "projection" || MODE === "projectionnoent") {
-      expect("placeholder cannot select synthetic current window", root.querySelector('[data-view="cycle"]')?.disabled === true);
+      expect("placeholder has no synthetic weekly forecast", !root.querySelector('[data-forecast="weekly"]'));
       expect("placeholder shows no synthetic current-window details", !root.querySelector(".current-window-details"));
       expect("placeholder retains reported quota status", /100% remaining/i.test(root.querySelector(".window-status")?.innerText || ""));
       if (MODE === "projection") {
         expect("placeholder keeps measured billing spend", root.querySelector(".subscription-summary .amount")?.textContent === "$494.66");
-        expect("placeholder retains real billing analysis", root.querySelector('[data-view="period"]')?.getAttribute("aria-pressed") === "true" && !root.querySelector('[data-view="period"]').disabled);
+        expect("placeholder retains real billing analysis", root.querySelector(".analysis-section")?.dataset.scope === "period");
         expect("placeholder analysis subtotal uses real billing period", root.querySelector(".analysis-subtotal")?.textContent === "$494.66");
         expect("calendar-day average remains", root.querySelector(".analysis-section")?.innerText.includes("$70.67"));
         expect("placeholder has no uncapped projection", !text.includes("$2,190.64"));
       } else {
-        expect("missing billing and placeholder disable both scopes", root.querySelector('[data-view="period"]')?.disabled === true);
-        expect("missing billing and placeholder select no fabricated scope", !root.querySelector('.analysis-section [data-view][aria-pressed="true"]'));
+        expect("missing billing and placeholder have no fabricated scope", root.querySelector(".analysis-section")?.dataset.scope === "unavailable");
+        expect("missing billing and placeholder have no forecast", !root.querySelector(".forecast-grid"));
         expect("missing billing and placeholder show no fabricated summary or range", !root.querySelector(".subscription-summary, .analysis-subtotal, .view-range"));
         expect("unavailable scope has no fabricated charts or ledger", !root.querySelector(".analysis-section .chart, .analysis-section .master-ledger"));
         expect("unavailable scope explains missing range", /needs a real window or subscription period/i.test(root.querySelector(".analysis-section .status")?.innerText || ""));
@@ -987,7 +984,6 @@ async function runScenarioAssertions() {
       expect("weekly window is labelled", /7-day/i.test(weeklyCard), weeklyCard);
       expect("current weekly pair yields a ceiling", /\$57\.95 total.*\$17\.96 used.*\$39\.98 left/i.test(weeklyCard), weeklyCard);
       expect("today's absence is named", /has not reported today/i.test(text), text.slice(0, 2500));
-      root = await chooseView(root, "period");
       root.querySelector(".forecast-details").open = true;
       text = root.querySelector(".panel")?.innerText || "";
       expect("subscription capacity uses the current weekly estimate", /Subscription capacity/i.test(text), text.slice(0, 1600));
@@ -1001,12 +997,18 @@ async function runScenarioAssertions() {
     }
 
     if (MODE === "dual") {
+      const weeklyChart = root.querySelector('[data-forecast="weekly"]');
+      const periodChart = root.querySelector('[data-forecast="period"]');
+      expect("weekly curve ends at weekly allowance", weeklyChart?.querySelector(".capacity-projection title")?.textContent.includes("$199.59"));
+      expect("weekly measured line reconciles", weeklyChart?.querySelector("polyline title")?.textContent.includes("$31.94"));
+      expect("subscription curve ends at full capacity", periodChart?.querySelector(".capacity-projection title")?.textContent.includes("$798.35"));
+      expect("subscription measured line reconciles", periodChart?.querySelector("polyline title")?.textContent.includes("$31.94"));
+      expect("subscription names same weekly basis", periodChart?.textContent.includes("$199.59 per 7D allowance"));
       expect("short window is labelled", /5-hour/i.test(root.querySelector('[data-window-kind="short"]')?.innerText || ""), text.slice(0, 1200));
       expect("weekly window is labelled", /7-day/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1200));
       expect("short remaining is visible", /100% remaining/i.test(root.querySelector('[data-window-kind="short"]')?.innerText || ""), text.slice(0, 1200));
       expect("weekly remaining is visible", /84% remaining/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1200));
       expect("weekly dollar reading names used and left", /\$199\.59 total.*\$31\.94 used.*\$167\.65 left/i.test(root.querySelector('[data-window-kind="weekly"]')?.innerText || ""), text.slice(0, 1600));
-      root = await chooseView(root, "period");
       root.querySelector(".forecast-details").open = true;
       text = root.querySelector(".panel")?.innerText || "";
       expect("weekly correction is named", /7-day correction/i.test(root.querySelector('[data-window-kind="weekly"] .hint')?.textContent || ""), text.slice(0, 1600));

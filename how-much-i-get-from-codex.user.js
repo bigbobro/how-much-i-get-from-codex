@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      4.2.0
+// @version      4.3.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "4.2.0";
+  const SCRIPT_VERSION = "4.3.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -179,6 +179,8 @@
       weeklyThin:
         "No dollar figure for this week yet. There is no current spend-and-percentage pair, and no immediately previous complete week to use as an anchor.",
       todayMissing: "The usage feed has not reported today yet. Live percentages include it; every dollar figure here stops before it.",
+      usageDelayTitle: "Just used Codex? Estimates may read too low",
+      usageDelay: "Recent consumption may not be included in credit statistics yet, so the 7D and subscription-period estimates may read too low after a burst of usage: the remaining percentage can drop before the credit total catches up. Reload later to check again.",
       depletedShort: (d) =>
         `The short window is used up — the API refuses further use until ${d}. That is not the 7-day quota, which is measured separately.`,
       allowanceConflict: (daily, window) =>
@@ -241,8 +243,13 @@
       winTableTotal: "listed windows total",
       thWinKind: "Kind",
       thWinCeil: "This window size",
-      chartComposite: "Spend by usage window",
+      chartComposite: "Subscription capacity projection",
       chartCompositeSub: "bars = dollars in each window; line = cumulative spend this billing period",
+      chartWeekly: "7D allowance projection",
+      chartWeeklySub: "Current week's cumulative spend → one full weekly allowance",
+      chartCapacity: "Allowance estimate",
+      chartCapacityHint: "The dashed line connects spend to the allowance estimate; its slope does not predict daily usage.",
+      chartWeeklyBasis: (v) => `Based on ${v} per 7D allowance, the current remainder and openings before renewal, plus available extras.`,
       chartBarPast: "past window spend",
       chartBarNow: "this window",
       chartLineSpend: "cumulative $",
@@ -428,6 +435,8 @@
       weeklyThin:
         "本周暂不给美元数。当前还没有能配对的周花费和实时百分比，前一个完整周也没有可借用的额度。",
       todayMissing: "用量接口还没上报今天。实时百分比含今天，但这里所有美元数字都停在今天之前。",
+      usageDelayTitle: "刚使用过 Codex？估值可能暂时偏低",
+      usageDelay: "额度剩余百分比可能已下降，但刚发生的消耗可能尚未计入 credit 统计。近期集中使用时，7D 额度可能被低估，并进一步拉低订阅周期估值；请稍后重新读取。",
       depletedShort: (d) =>
         `短窗口已用尽，接口在 ${d} 之前拒绝继续使用。这跟 7 天额度是两回事，7 天额度在下面单独测。`,
       allowanceConflict: (daily, window) =>
@@ -490,8 +499,13 @@
       winTableTotal: "已列窗口合计",
       thWinKind: "类型",
       thWinCeil: "该窗额度",
-      chartComposite: "按用量窗口看花费",
+      chartComposite: "订阅周期额度推算",
       chartCompositeSub: "柱 = 每个窗口花了多少美元；线 = 本账期累计花费",
+      chartWeekly: "7D 额度推算",
+      chartWeeklySub: "本周累计已用 → 一整份 7D 额度",
+      chartCapacity: "额度估值",
+      chartCapacityHint: "虚线连接已用金额与额度估值，斜率不代表每天的使用速度。",
+      chartWeeklyBasis: (v) => `按每份 7D 额度 ${v}，结合当前剩余、续费前新开的窗口和可用额外额度推算。`,
       chartBarPast: "已过窗口花费",
       chartBarNow: "当前窗口",
       chartLineSpend: "累计 $",
@@ -1450,7 +1464,6 @@
     unpricedFast: [],
     fetchedFrom: "",
     freshnessMs: 0,
-    view: "period", // analysis scope: cycle | period | empty when neither range is available
     loaded: false,
     loading: false,
     error: "",
@@ -1733,17 +1746,17 @@
 
   function viewRange() {
     const today = dayKey(Date.now());
-    if (state.view === "cycle" && hasCurrentWindow()) return { from: dayKey(state.win.startAt), to: today };
-    if (state.view === "period" && hasRenewalDate()) return { from: periodRange().from, to: today };
+    if (hasRenewalDate()) return { scope: "period", from: periodRange().from, to: today };
+    if (hasCurrentWindow()) return { scope: "cycle", from: dayKey(state.win.startAt), to: today };
     return null;
   }
 
   function currentSlice() {
     const range = viewRange();
     if (!range) return null;
-    const { from, to } = range;
+    const { scope, from, to } = range;
     const days = state.days.filter((d) => d.date >= from && d.date <= to);
-    return { days, s: summarize(days), from, to };
+    return { days, s: summarize(days), scope, from, to };
   }
 
   // Cycle spend and the ceiling it implies. A null ceiling means not enough signal yet.
@@ -2207,7 +2220,7 @@
     .ghost { appearance: none; width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-dim); font-size: 20px; line-height: 1; transition: background 140ms, color 140ms; }
     .ghost:hover { background: var(--bg-raised); color: var(--ink); }
     .analysis-section, #analysis-content { display: grid; gap: 24px; min-width: 0; }
-    .analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+    .analysis-heading { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
     .analysis-heading h2 { margin: 0; }
     .analysis-scope { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; }
     .analysis-subtotal { color: var(--ink); font-size: 24px; font-weight: 500; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
@@ -2222,26 +2235,26 @@
     .disclosure-body .formula-note { margin: 0; padding: 0; border: 0; }
     .payback .readout { font-size: 11px; }
     .summary-card.infer .amount { color: var(--ink-2); font-size: 25px; }
-    .view-tabs { display: flex; gap: 26px; }
-    .view-tabs button { position: relative; appearance: none; padding: 13px 0; border: 0; background: transparent; color: var(--ink-faint); font-size: 13px; white-space: nowrap; transition: color 150ms; }
-    .view-tabs button:hover { color: var(--ink); }
-    .view-tabs button[aria-pressed="true"] { color: var(--color-accent); font-weight: 600; }
-    .view-tabs button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--color-accent); }
     .view-range { color: var(--ink-faint); font: 11px var(--mono); white-space: nowrap; }
-    .sheet { --section-columns: minmax(0, 2fr) minmax(0, 1fr); --column-gap: 48px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 30px 32px; display: flex; flex-direction: column; gap: 28px; }
-    .sheet > *, .analysis-grid > *, .period-detail-grid > * { min-width: 0; }
+    .sheet { --column-gap: 48px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 30px 32px; display: flex; flex-direction: column; gap: 28px; }
+    .sheet > *, .analysis-grid > *, .forecast-grid > * { min-width: 0; }
     h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; letter-spacing: -.15px; }
     h2 em { display: block; margin-top: 4px; font-size: 11px; font-style: normal; font-weight: 400; letter-spacing: 0; color: var(--ink-faint); }
     .eyebrow { color: var(--ink-faint); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
     .is-inferred, .inf { color: var(--inferred-text); }
     .eyebrow.is-inferred::before { content: ""; display: inline-block; width: 7px; height: 7px; border: 1px dashed currentColor; margin-right: 6px; }
     .hint, .section-note { margin: 0; color: var(--ink-faint); font-size: 11px; line-height: 1.65; }
+    .usage-delay { padding: 12px 16px; border-left: 2px solid var(--inferred); background: var(--bg-raised); font-size: 12px; line-height: 1.65; color: var(--ink-dim); }
+    .usage-delay strong { color: var(--ink); font-weight: 550; }
+    .usage-delay p { margin: 4px 0 0; }
     .readout { display: flex; flex-wrap: wrap; gap: 5px 16px; color: var(--ink-dim); font-size: 12px; }
     .readout b { color: var(--ink); font-weight: 550; }
-    .period-detail-grid { display: grid; grid-template-columns: var(--section-columns); column-gap: var(--column-gap); row-gap: 24px; }
+    .forecast-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--column-gap); row-gap: 24px; }
+    .forecast-grid > :only-child { grid-column: 1 / -1; }
+    .forecast-grid .section-note { margin-top: 12px; }
 
-    .period-detail-grid > :nth-child(2) { position: relative; }
-    .period-detail-grid > :nth-child(2)::before {
+    .forecast-grid > :nth-child(2) { position: relative; }
+    .forecast-grid > :nth-child(2)::before {
       content: ""; position: absolute; left: calc(var(--column-gap) / -2); top: 0; bottom: 0; width: 1px; background: var(--line);
     }
     .gauge-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 28px; }
@@ -2292,6 +2305,8 @@
     .chart-viewport { overflow-x: auto; }
     .chart svg { display: block; width: 100%; height: auto; }
     .chart-viewport > svg { min-width: 420px; }
+    .capacity-chart .chart-viewport > svg { min-width: 0; --chart-label-size: 11px; }
+    .capacity-chart svg text { font-size: var(--chart-label-size); }
     svg text { font-family: var(--font-sans); font-size: 11px; fill: var(--ink-dim); }
     .chart line.axis { stroke: var(--line-strong); }
     .chart svg rect { transition: opacity 140ms; }
@@ -2384,13 +2399,14 @@
       .analysis-grid > :nth-child(n + 3) { padding-top: 22px; border-top: 1px solid var(--line); }
     }
     @media (max-width: 900px) {
-      .sheet { --section-columns: minmax(0, 1fr); }
-      .period-detail-grid > :nth-child(2) { padding-top: 24px; border-top: 1px solid var(--line); }
-      .period-detail-grid > :nth-child(2)::before { display: none; }
+      .forecast-grid { grid-template-columns: minmax(0, 1fr); }
+      .forecast-grid > :nth-child(2) { padding-top: 24px; border-top: 1px solid var(--line); }
+      .forecast-grid > :nth-child(2)::before { display: none; }
       .stack-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
       .wordmark { font-size: 20px; }
     }
     @media (max-width: 640px) {
+      .capacity-chart .chart-viewport > svg { --chart-label-size: 18px; }
       .scrim { padding: 8px; }
       .panel { border-radius: 12px; }
       .masthead { padding: 18px 18px 12px; gap: 10px; align-items: flex-start; }
@@ -2401,10 +2417,6 @@
       .seg { padding: 2px; }
       .seg button { padding: 5px 7px; }
       .ghost { width: 30px; height: 32px; }
-      .analysis-heading { flex-wrap: wrap; gap: 4px; }
-      .view-tabs { gap: 20px; }
-      .view-tabs button { font-size: 12px; }
-      .view-tabs button[aria-pressed="true"]::after { bottom: 6px; }
       .analysis-scope .view-range { width: 100%; margin: 0; font-size: 10px; }
       .sheet { padding: 24px 18px; gap: 24px; }
       .window-status { padding: 0 18px 16px; }
@@ -3093,16 +3105,29 @@
       </div>`;
   }
 
+  function weeklyForecastHtml() {
+    const reading = weeklyAllowanceReading();
+    const win = reading?.window;
+    if (!win || win.placeholder) return "";
+    return capacityChartHtml(
+      { p: { startMs: win.startAt, endMs: win.resetAt, fullEndMs: win.resetAt }, rows: [] },
+      reading.credits > 0 ? { projected: reading.credits } : null,
+      "weekly",
+    );
+  }
+
   /*
    * Bars = measured $ spend per usage window (past + now only).
-   * Line = cumulative billing-period spend, with a dashed projection to renewal.
+   * Line = cumulative spend, with a dashed connection to the capacity at reset or renewal.
    * Future windows are not drawn as empty boxes — they only appear in the remaining stack.
    */
-  function periodCompositeChartHtml(winInfo, proj) {
+  function capacityChartHtml(winInfo, proj, scope = "period") {
     const L = t();
+    const isWeekly = scope === "weekly";
+    const title = isWeekly ? L.chartWeekly : L.chartComposite;
     const { p, rows } = winInfo;
     const spentRows = rows.filter((r) => r.kind !== "ahead" && (r.spend > 0 || r.kind === "now"));
-    if (!spentRows.length && !proj) return "";
+    if (!isWeekly && !spentRows.length && !proj) return "";
 
     const width = 640;
     const height = 210;
@@ -3129,7 +3154,7 @@
       const key = addDays(dayKey(t0), i);
       if (key > todayKey) break;
       running += byDate.get(key) || 0;
-      linePts.push([xAt(dayMs(key) + DAY_MS * 0.5), running]);
+      linePts.push([xAt(Math.min(Date.now(), dayMs(key) + DAY_MS * 0.5)), running]);
     }
     if (linePts.length === 1) linePts.push([xAt(Date.now()), running]);
 
@@ -3175,12 +3200,12 @@
     if (proj && projected >= lastV - 0.01) {
       const endX = xAt(t1);
       const endY = y(projected);
-      projLine = `<line x1="${last[0].toFixed(1)}" y1="${y(lastV).toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}"
+      projLine = `<line class="capacity-projection" x1="${last[0].toFixed(1)}" y1="${y(lastV).toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}"
         stroke="var(--inferred)" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round">
-        <title>${esc(`${L.inferred} ${usd(projected)}`)}</title></line>
+        <title>${esc(`${L.chartCapacity} ${usd(projected)}`)}</title></line>
         <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="3.5" fill="var(--inferred)" />
         <text x="${(endX - 5).toFixed(1)}" y="${Math.max(top + 14, endY - 9).toFixed(1)}" text-anchor="end"
-          style="font-family:var(--mono);font-size:11px;fill:var(--inferred-text)">${esc(usd(projected))}</text>`;
+          style="font-family:var(--mono);font-size:var(--chart-label-size);fill:var(--inferred-text)">${esc(usd(projected))}</text>`;
     }
 
     const nowX = xAt(Date.now());
@@ -3192,21 +3217,21 @@
       .join("");
 
     return `
-      <div class="section chart">
+      <div class="section chart capacity-chart" data-forecast="${scope}">
         <div class="section-head">
-          <h2>${esc(L.chartComposite)}<em>${esc(L.chartCompositeSub)}</em></h2>
+          <h2>${esc(title)}<em>${esc(isWeekly ? L.chartWeeklySub : L.chartCompositeSub)}</em></h2>
         </div>
-        <div class="chart-viewport" tabindex="0" role="region" aria-label="${esc(L.chartComposite)}">
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartComposite)}">
+        <div class="chart-viewport" tabindex="0" role="region" aria-label="${esc(title)}">
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(title)}">
           ${gridYs}
           <line x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule)" />
           ${bars}
           <polyline points="${poly}" fill="none" stroke="var(--ink)" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-            <title>${esc(L.chartLineSpend)}</title>
+            <title>${esc(`${L.chartLineSpend} ${usd(lastV)}`)}</title>
           </polyline>
           <circle cx="${last[0].toFixed(1)}" cy="${y(lastV).toFixed(1)}" r="3.5" fill="var(--ink)" />
           <text x="${(last[0] - 7).toFixed(1)}" y="${Math.max(top + 14, y(lastV) - 9).toFixed(1)}" text-anchor="end"
-            style="font-family:var(--mono);font-size:11px;fill:var(--ink)">${esc(usd(lastV))}</text>
+            style="font-family:var(--mono);font-size:var(--chart-label-size);fill:var(--ink)">${esc(usd(lastV))}</text>
           ${projLine}
           <line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top}" y2="${y(0)}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3" />
           <text x="${nowX.toFixed(1)}" y="${top - 5}" text-anchor="middle">${esc(L.today)}</text>
@@ -3215,11 +3240,14 @@
         </svg>
         </div>
         <div class="legend-key">
-          <span><i class="key-solid soft"></i>${esc(L.chartBarPast)}</span>
-          <span><i class="key-solid"></i>${esc(L.chartBarNow)}</span>
+          ${isWeekly ? "" : `<span><i class="key-solid soft"></i>${esc(L.chartBarPast)}</span>
+          <span><i class="key-solid"></i>${esc(L.chartBarNow)}</span>`}
           <span><i class="key-line"></i>${esc(L.chartLineSpend)}</span>
-          <span><i class="key-line dash"></i>${esc(L.inferred)}</span>
+          ${projLine ? `<span><i class="key-line dash"></i>${esc(L.chartCapacity)}</span>` : ""}
         </div>
+        ${projLine ? `<p class="section-note">${esc(L.chartCapacityHint)}</p>` : ""}
+        ${isWeekly && !proj ? `<p class="section-note">${esc(L.weeklyThin)}</p>` : ""}
+        ${!isWeekly && proj && weeklyWindow() ? `<p class="section-note">${esc(L.chartWeeklyBasis(usd(proj.ceiling)))}</p>` : ""}
       </div>`;
   }
 
@@ -3373,20 +3401,15 @@
         ${periodSummaryCardsHtml(s.credits, leftTotal)}
       </section>
       `,
+      chart: spentRowsHaveData(winInfo) || projection ? capacityChartHtml(winInfo, projection) : "",
       details: `
       <details class="detail-disclosure forecast-details" data-detail="forecast">
       <summary>${esc(L.forecastDetails)}</summary>
       <div class="disclosure-body">
       ${subscriptionFormulaHtml(s.credits, parts, grant)}
       ${parts.proj?.ceiling != null ? `<p class="section-note">${esc(breakdownLine(parts.proj))}</p>` : ""}
-      <div class="period-detail-grid">
-      ${
-        spentRowsHaveData(winInfo) || projection
-          ? periodCompositeChartHtml(winInfo, projection)
-          : `<div class="section readout"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
-      }
+      ${!spentRowsHaveData(winInfo) && !projection ? `<div class="section readout"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>` : ""}
       ${remainingStackHtml(parts)}
-      </div>
       ${
         footnotes.length
           ? `<div class="period-footnotes">${footnotes.map((t) => `<span>${esc(t)}</span>`).join("")}</div>`
@@ -3650,20 +3673,16 @@
 
   function analysisHtml() {
     const L = t();
-    const { days, s, from, to } = currentSlice() || { days: state.days };
+    const { days, s, scope, from, to } = currentSlice() || { days: state.days };
     return `
-      <section class="analysis-section" aria-label="${esc(L.analysis)}" data-scope="${esc(state.view || "unavailable")}">
+      <section class="analysis-section" aria-label="${esc(L.analysis)}" data-scope="${esc(scope || "unavailable")}">
         <div class="analysis-heading">
           <h2>${esc(L.analysis)}</h2>
-          <div class="view-tabs" role="group" aria-label="${esc(L.analysis)}">
-            <button data-view="cycle" aria-pressed="${state.view === "cycle"}" aria-controls="analysis-content" ${hasCurrentWindow() ? "" : "disabled"}>${esc(L.currentWindow)}</button>
-            <button data-view="period" aria-pressed="${state.view === "period"}" aria-controls="analysis-content" ${hasRenewalDate() ? "" : "disabled"}>${esc(L.period)}</button>
-          </div>
         </div>
         <div id="analysis-content">
           ${s ? `
           <div class="analysis-scope">
-            <span class="eyebrow">${esc(state.view === "cycle" ? L.currentWindow : L.period)} · ${esc(L.analysisSpent)}</span>
+            <span class="eyebrow">${esc(scope === "cycle" ? L.currentWindow : L.period)} · ${esc(L.analysisSpent)}</span>
             <strong class="analysis-subtotal">${usd(s.credits)}</strong>
             <span class="view-range">${esc(from)} — ${esc(to)} · UTC</span>
           </div>
@@ -3677,7 +3696,7 @@
             ${modelChartHtml(s)}
             ${surfaceChartHtml(s)}
           </div>
-          ${masterLedgerHtml(days, s)}` : `<div class="status">${esc(state.view === "cycle" ? windowCopy("emptyCycle") : L.emptyPeriod)}<div class="hint">${esc(L.emptyHint)}</div></div>`}
+          ${masterLedgerHtml(days, s)}` : `<div class="status">${esc(scope === "cycle" ? windowCopy("emptyCycle") : L.emptyPeriod)}<div class="hint">${esc(L.emptyHint)}</div></div>`}
           ` : `<div class="status">${esc(L.analysisUnavailable)}</div>`}
           ${notesHtml(days)}
         </div>
@@ -3688,20 +3707,21 @@
     const L = t();
     if (state.loading) return `<div class="status">${esc(L.loading)}</div>`;
     if (state.error) return `<div class="status bad">${esc(state.error)}</div>`;
-    if (!hasRenewalDate()) state.view = hasCurrentWindow() ? "cycle" : "";
-    else if (state.view !== "cycle" || !hasCurrentWindow()) state.view = "period";
 
     const p = periodRange();
     const period = hasRenewalDate()
       ? periodHeadHtml(summarize(state.days.filter((d) => d.date >= p.from && d.date <= dayKey(Date.now()))))
       : null;
     const currentWindow = state.win ? gaugeHtml() : null;
+    const forecasts = weeklyForecastHtml() + (period?.chart || "");
     const history = cycleStripHtml(projectToRenewal());
     return `
       <div class="sheet">
         ${hasRenewalDate() ? selectedSubscriptionHtml() : ""}
+        <aside class="usage-delay" role="note"><strong>${esc(L.usageDelayTitle)}</strong><p>${esc(L.usageDelay)}</p></aside>
         ${period ? period.summary : state.ent?.ambiguous ? subscriptionChoiceHtml() : renewalUnavailableHtml()}
         ${currentWindow?.warnings || ""}
+        ${forecasts ? `<div class="forecast-grid">${forecasts}</div>` : ""}
         ${analysisHtml()}
         ${period?.details || ""}
         ${hasCurrentWindow() ? currentWindow?.details || "" : ""}
@@ -3709,25 +3729,6 @@
       </div>`;
   }
   function bindAnalysisControls(container) {
-    container.querySelectorAll("[data-view]").forEach((button) => {
-      button.onclick = () => {
-        if (button.disabled || button.dataset.view === state.view) return;
-        const section = state.root.querySelector(".analysis-section");
-        const sheet = state.root.querySelector(".sheet");
-        const scrollTop = sheet.scrollTop;
-        const openDetails = [".master-ledger", ".notes details"].filter((selector) => section.querySelector(selector)?.open);
-        const subtab = section.querySelector('[data-subtab][aria-pressed="true"]')?.dataset.subtab;
-        state.view = button.dataset.view;
-        section.outerHTML = analysisHtml();
-        const updated = state.root.querySelector(".analysis-section");
-        for (const selector of openDetails) updated.querySelector(selector)?.setAttribute("open", "");
-        bindAnalysisControls(updated);
-        if (subtab) updated.querySelector(`[data-subtab="${subtab}"]`)?.click();
-        updated.querySelector(`[data-view="${state.view}"]`)?.focus({ preventScroll: true });
-        sheet.scrollTop = scrollTop;
-      };
-    });
-
     container.querySelectorAll("[data-day-drill]").forEach((btn) => {
       btn.onclick = () => {
         const id = btn.dataset.dayDrill;
@@ -3770,7 +3771,6 @@
     if (!element) return "";
     if (element.classList?.contains("panel")) return ".panel";
     if (element.classList?.contains("cost-input")) return ".cost-input";
-    if (element.dataset?.view) return `[data-view="${element.dataset.view}"]`;
     if (element.dataset?.lang) return `[data-lang="${element.dataset.lang}"]`;
     if (element.dataset?.act) return `[data-act="${element.dataset.act}"]`;
     return "";
@@ -4014,9 +4014,6 @@
       state.freshnessMs = data.freshnessMs;
       state.loaded = true;
       syncCycleMemory();
-
-      // Billing anchors the initial analysis; without a renewal date only the real window applies.
-      state.view = hasRenewalDate() ? "period" : hasCurrentWindow() ? "cycle" : "";
 
       state.loading = false;
       render();

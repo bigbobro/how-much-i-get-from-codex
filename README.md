@@ -9,9 +9,9 @@ The official page may show two bars now — a short *5-hour usage limit* and a *
 limit*. Their percentages answer different questions, and the API does not put a dollar
 denominator beside either one. This reads both windows and keeps their meanings separate.
 
-![Desktop panel with quota status, a billing-period summary and four aligned usage charts](docs/panel.jpg)
+![Version 4.3.0 with a reporting-delay reminder and weekly and subscription projection charts](docs/panel.jpg)
 
-<sub>A single-page desktop panel: quota status at the top, a billing-period summary, and four equal-width usage charts. Preview uses recorded test data.</sub>
+<sub>Version 4.3.0: quota status, a reporting-delay reminder, and two connected allowance projections. Screenshot uses recorded test data.</sub>
 
 For anyone on Plus, Pro, Business or Team who uses Codex enough to wonder what the
 subscription is really worth.
@@ -28,23 +28,27 @@ running after you close it.
 - How much more opens before your subscription renews (full grants)
 - What a turn costs, what 1,000 lines of code cost, and cache hit rates
 - Which day, which model, and which surface took the most
-- **Usage details**: Daily breakdown with model and speed-tier drill-down, plus model totals for the selected range
+- **Usage details**: Daily breakdown with model and speed-tier drill-down, plus model totals for the analysis period
 
-## Panel layout in 4.2.0
+## Panel layout
+
+New in 4.3.0: removed the analysis range selector, made both projection layers visible, and added a reminder that delayed credit statistics can understate the estimates.
 
 The panel is designed for desktop browsers, with one page and a shared column grid:
 
 - **Quota status** stays at the top, showing the available 5-hour and 7-day limits and reset times.
 - **Billing-period summary** shows the API-equivalent value used in the real billing period,
   the subscription-cost input and payback ratio, and the estimated capacity left before renewal.
-- **Usage analysis** has its own **Current window / This subscription** selector. Its subtotal,
-  dates, metrics, charts and usage details all follow that range. The quota status and
-  billing-period summary stay unchanged when you switch.
+- **7D allowance projection → subscription capacity projection** appear below the summary.
+  Both show solid cumulative spend and a dashed connection to their allowance estimate.
+  The subscription projection names the same 7D estimate used to value remaining openings.
+- **Usage analysis** uses the real subscription period for its subtotal, dates, metrics,
+  charts and usage details, without a range selector.
 - **Daily spend, token costs, models and surfaces** sit in four equal-width columns on a wide
   desktop window. Forecast calculations, current-window details and history expand below them.
 
 When the billing period is unavailable, analysis uses a valid current window. Placeholder
-windows cannot be selected; if neither range is known, the panel explains what is missing
+windows cannot supply an analysis range; if neither range is known, the panel explains what is missing
 without inventing a date range or subtotal.
 
 ---
@@ -171,6 +175,10 @@ whenever the ground under it gives way:
 
 ### Projections
 
+The two charts are visible by default. Their dashed segments connect cumulative spend to
+the capacity at the weekly reset or subscription renewal; their slopes do not predict
+daily usage. Without a weekly estimate, that chart shows measured usage only.
+
 The subscription period is the interval from the current payment to the next entitlement
 renewal, not an assumed calendar month. The script counts weekly openings from timestamps and
 keeps the renewal boundary out of the current period (billing intervals are `[start, renewal)`).
@@ -203,6 +211,13 @@ description.
 ---
 
 ## Known biases, and which way they point
+
+The panel displays a reminder before the amounts and projections: allowance percentages and
+credit consumption statistics may update at different times. Recent consumption may not yet
+be included, even when today's row exists. If the remaining percentage has already fallen, the
+7D estimate can read too low and pull the subscription estimate down with it. Reload later
+before relying on these figures. No fixed delay is promised for the personal-plan web analytics; see the
+[official-source freshness review](docs/credit-data-freshness.md).
 
 These are not unknowns. They lean in a known direction — read the numbers with them in mind.
 
@@ -263,15 +278,15 @@ python3 -m http.server 8731
 ```
 
 Open `http://127.0.0.1:8731/smoketest.html?preview=1#multi` for a desktop preview, or
-`http://127.0.0.1:8731/smoketest.html?all=1` to run all 30 scenario checks. The
+`http://127.0.0.1:8731/smoketest.html?all=1` to run all 31 scenario checks. The
 harness freezes the clock, cache-busts the userscript, checks the seven expected requests,
 rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 
 | Scenario | What it covers |
 |---|---|
-| *(default)* | window-percent fallback, fixed period summary, analysis/language focus, close/Escape/backdrop focus restoration |
+| *(default)* | window-percent fallback, fixed period summary, automatic analysis range, language focus, close/Escape/backdrop focus restoration |
 | `#personal` | Plus-style: the workspace breakdown 400s, allowance measured at **$199.59** |
-| `#spill` | period **$209.57** vs current window **$29.94**; switching keeps the summary, price input and quota fixed while all analysis totals reconcile; the opening window is clipped to the period |
+| `#spill` | period **$209.57** vs current window **$29.94**; analysis stays on the billing period and all analysis totals reconcile; the opening window is clipped to the period |
 | `#currentspill` | the live window crosses the billing-period start — current row and total are clipped to **$149.90** |
 | `#multi` | 7-day window, a completed cycle, multi-opening forecast |
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
@@ -285,15 +300,15 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#twosubs` | one login, two subscriptions — the panel must name which one it reports |
 | `#sameworkspaces` | two matching workspace subscriptions — asks for the renewal date, no per-seat memory write before selection |
 | `#samepersonals` | two matching personal subscriptions — choosing 08/18 refetches and totals the real 07/18 → 08/18 period |
-| `#fresh` | a real window has just reset; empty current-window analysis preserves the billing summary and can switch back to period data |
+| `#fresh` / `#freshweek` | a real window has just reset; billing analysis remains available, and an empty weekly chart withholds an unknown allowance estimate |
 | `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
 | `#noent` | no renewal date — withholds billing-period figures and retains valid current-window analysis |
 | `#zerobasis` | the latest completed zero-spend window remains visible as history |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
-| `#projection` | placeholder window cannot be selected; real billing-period spend and completed-day average remain available, with no uncapped projection |
+| `#projection` | placeholder window cannot supply an analysis range; real billing-period spend and completed-day average remain available, with no uncapped projection |
 | `#projectionnoent` | placeholder window and no billing information — live quota status stays visible, with no fabricated analysis range or subtotal |
 | `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web; total **$99.80** |
-| `#dual` | the 5-hour + 7-day shape; weekly correction, timestamp-based three-window formula, and a separate reset-card term |
+| `#dual` | the 5-hour + 7-day shape; weekly curve **$199.59** feeds subscription curve **$798.35**, with a timestamp-based three-window formula and a separate reset-card term |
 | `#thinweek` / `#thinprev` | the recent weekly reading remains authoritative; a remembered completed window stays a fallback |
 | Additional viewport checks | `#dual` and `#samepersonals` at 390px, and `#fast` at 768px, retain basic overflow and focus checks |
 
