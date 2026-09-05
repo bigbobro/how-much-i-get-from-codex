@@ -28,7 +28,7 @@ running after you close it.
 - How much more opens before your subscription renews (full grants)
 - What a turn costs, what 1,000 lines of code cost, and cache hit rates
 - Which day, which model, and which surface took the most
-- **Interactive Master Ledger**: Daily breakdown with row-level model drill-down, global model allocation, and full calculation parameter audits
+- **Interactive Master Ledger**: Daily breakdown with model and speed-tier drill-down, plus model totals for the selected range
 
 ---
 

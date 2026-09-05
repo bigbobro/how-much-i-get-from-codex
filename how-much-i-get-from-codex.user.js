@@ -263,18 +263,9 @@
       chartSurfaceSubTurns: "no surface shares from the API — split by each surface's share of turns",
       unattributed: "Unattributed",
       seeNumbers: "See the numbers",
-      ledgerBadge: "Daily · Models · Params",
+      ledgerBadge: "Daily · Models",
       subTabDaily: "Daily Breakdown",
       subTabModels: "Model Split",
-      subTabParams: "Calculation Params",
-      paramCalibration: "7-Day Basis",
-      paramUsedPct: "Window Used Ratio",
-      paramLeftPct: "Window Unused Ratio",
-      paramLeftCredits: "Window Remaining",
-      paramThrottle: "5-Hour Throttle Cap",
-      paramFutureWindows: "Future Windows",
-      paramUntilRenewal: "Remaining Grant Capacity",
-      paramResetIn: "Reset Time Left",
       today: "today",
       partialDay: "today is still filling — this bar will grow",
 
@@ -527,19 +518,9 @@
       chartSurface: "钱花在哪个入口上",
       chartSurfaceSub: "按接口给的入口份额拆，不是按 token 数",
       chartSurfaceSubTurns: "接口没给入口份额 —— 按各入口的 turns 占比拆",
-      seeNumbers: "查看用量明细",
-      ledgerBadge: "按日 · 模型 · 参数",
+      ledgerBadge: "按日 · 模型",
       subTabDaily: "每日流水",
       subTabModels: "模型分账",
-      subTabParams: "计算参数",
-      paramCalibration: "7天额度校正基准",
-      paramUsedPct: "当前窗口已用比例",
-      paramLeftPct: "当前窗口未用比例",
-      paramLeftCredits: "当前窗口剩余额度",
-      paramThrottle: "5小时流速上限",
-      paramFutureWindows: "续费前待开窗口数",
-      paramUntilRenewal: "续费前还能拿总额",
-      paramResetIn: "距离重置时间",
       unattributed: "未归因",
       seeNumbers: "看具体数字",
       today: "今天",
@@ -2259,7 +2240,7 @@
       outline: none;
     }
     
-    .num, .amount, .gauge-fig, .forecast-fig, .stat-fig, .table-num, .n, .v, .svg-text-num {
+    .num, .amount, .gauge-fig, .forecast-fig, .stat-fig, .n, .v, .svg-text-num {
       font-variant-numeric: tabular-nums;
     }
     
@@ -2511,19 +2492,7 @@
     
     .sub-row { display: none; background: var(--bg-tile-sub); }
     .sub-row.is-open { display: table-row; }
-    .drilldown-box { padding: 8px 12px 12px 28px; display: flex; flex-direction: column; gap: 8px; }
-    .drilldown-head { font-size: 10.5px; color: var(--ink-faint); letter-spacing: 0.04em; }
-    .drilldown-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      border-left: 2px solid var(--color-accent);
-      background: var(--bg-tile);
-      border-radius: 0 6px 6px 0;
-    }
-    .drilldown-table th, .drilldown-table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--line); }
-    .drilldown-table th { color: var(--ink-faint); font-weight: 500; font-size: 10px; background: var(--bg-tile-sub); }
-    .drilldown-table td.n, .drilldown-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
+    .drilldown-box { padding: 8px 12px 12px 28px; }
     
     /* Master Audit Ledger Drawer */
     .master-ledger {
@@ -2591,20 +2560,6 @@
     .ledger-pane { display: none; }
     .ledger-pane.is-active { display: block; }
     
-    /* KV Grid */
-    .kv {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px 16px;
-      padding: 12px 16px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--bg-tile);
-    }
-    .kv div { min-width: 0; }
-    .kv dt { font-size: 10.5px; color: var(--ink-faint); letter-spacing: 0.05em; }
-    .kv dd { margin: 4px 0 0; font-size: 13px; font-weight: 600; text-align: right; }
-    
     /* Notes & Status */
     .notes { padding: 12px 16px; background: var(--bg-tile); border: 1px solid var(--line); border-radius: 10px; font-size: 11px; color: var(--ink-faint); }
     .notes h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; }
@@ -2612,12 +2567,6 @@
     .notes li.warn { color: var(--accent-dim); }
     .status { padding: 40px 20px; text-align: center; color: var(--ink-dim); }
     .status.bad { color: oklch(0.70 0.18 25); }
-    
-    /* Swatches */
-    .swb { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
-    .swb.a { background: var(--seg-b); }
-    .swb.b { background: var(--seg-a); }
-    .swb.c { background: var(--seg-c); }
   `;
   function percentNumber(value) {
     if (!Number.isFinite(Number(value))) return "—";
@@ -3650,10 +3599,10 @@
           .map((d, idx) => {
             const inTok = d.cached + d.uncached;
             const dayId = `day-${idx}`;
-            const models = Array.isArray(d.models) && d.models.length > 0 ? d.models : [];
+            const hasModels = d.models.length > 0;
             return `<tr>
               <td>
-                ${models.length ? `<button type="button" class="row-toggle" data-day-drill="${dayId}"><span class="rchev">▸</span> ${esc(d.date)}</button>` : esc(d.date)}
+                ${hasModels ? `<button type="button" class="row-toggle" data-day-drill="${dayId}"><span class="rchev">▸</span> ${esc(d.date)}</button>` : esc(d.date)}
               </td>
               <td class="n strong">${usd(d.credits)}</td>
               <td class="n">${int(d.credits)}</td>
@@ -3663,31 +3612,11 @@
               <td class="n">${inTok ? pct(d.cached / inTok) : "—"}</td>
               ${anyLoc ? `<td class="n">${d.loc?.added ? "+" + int(d.loc.added) : "—"}</td>` : ""}
             </tr>
-            ${models.length ? `
+            ${hasModels ? `
             <tr id="sub-${dayId}" class="sub-row">
               <td colspan="${anyLoc ? 8 : 7}">
                 <div class="drilldown-box">
-                  <span class="drilldown-head">${esc(d.date)} 模型支出构成：</span>
-                  <table class="drilldown-table">
-                    <thead>
-                      <tr>
-                        <th>模型名称</th><th class="n">当日花费</th><th class="n">当日占比</th>
-                        <th class="n">turns</th><th class="n">单 turn</th><th class="n">Token 数</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${models.map((m) => `
-                        <tr>
-                          <td><span class="swb b"></span> ${esc(modelName(m.name || m.model))}</td>
-                          <td class="n strong">${usd(m.credits)}</td>
-                          <td class="n">${pct(m.credits / (d.credits || 1))}</td>
-                          <td class="n">${m.turns ? esc(turnCount(m.turns)) : "—"}</td>
-                          <td class="n">${m.turns ? usd(m.credits / m.turns) : "—"}</td>
-                          <td class="n">${tokenCount(m.tokens)}</td>
-                        </tr>
-                      `).join("")}
-                    </tbody>
-                  </table>
+                  ${modelTableHtml(summarize([d]))}
                 </div>
               </td>
             </tr>` : ""}`;
@@ -3723,24 +3652,17 @@
 
   function masterLedgerHtml(days, s) {
     const L = t();
-    const r = cycleReading();
-    const win = state.win;
-    const proj = projectToRenewal();
-    const ceiling = r?.ceiling;
-    const now = Date.now();
-    const resetInDays = win ? Math.max(0, (win.resetAt - now) / DAY_MS).toFixed(1) : "—";
 
     return `
       <details class="master-ledger">
         <summary class="ledger-sum">
-          <span class="left"><span class="chev">▸</span>${esc(L.seeNumbers || "查看用量明细")}</span>
-          <span class="ledger-badge">${esc(L.ledgerBadge || "按日 · 模型 · 参数")}</span>
+          <span class="left"><span class="chev">▸</span>${esc(L.seeNumbers)}</span>
+          <span class="ledger-badge">${esc(L.ledgerBadge)}</span>
         </summary>
         <div class="ledger-body">
           <div class="sub-tabs" role="tablist">
-            <button type="button" class="sub-tab-btn is-active" data-subtab="daily">${esc(L.subTabDaily || "每日流水")}</button>
-            <button type="button" class="sub-tab-btn" data-subtab="model">${esc(L.subTabModels || "模型分账")}</button>
-            <button type="button" class="sub-tab-btn" data-subtab="params">${esc(L.subTabParams || "计算参数")}</button>
+            <button type="button" class="sub-tab-btn is-active" data-subtab="daily">${esc(L.subTabDaily)}</button>
+            <button type="button" class="sub-tab-btn" data-subtab="model">${esc(L.subTabModels)}</button>
           </div>
 
           <div class="ledger-pane is-active" data-pane="daily">
@@ -3751,18 +3673,6 @@
             ${modelTableHtml(s)}
           </div>
 
-          <div class="ledger-pane" data-pane="params">
-            <dl class="kv">
-              <div><dt>${esc(L.paramCalibration || "7天额度校正基准")}</dt><dd class="table-num">${ceiling ? usd(ceiling) : "—"}</dd></div>
-              <div><dt>${esc(L.paramUsedPct || "当前窗口已用比例")}</dt><dd class="table-num">${r ? pct(r.used / 100) : "—"}</dd></div>
-              <div><dt>${esc(L.paramLeftPct || "当前窗口未用比例")}</dt><dd class="table-num">${r ? pct(Math.max(0, 1 - r.used / 100)) : "—"}</dd></div>
-              <div><dt>${esc(L.paramLeftCredits || "当前窗口剩余额度")}</dt><dd class="table-num">${ceiling ? usd(Math.max(0, ceiling - (r.s?.credits || 0))) : "—"}</dd></div>
-              <div><dt>${esc(L.paramThrottle || "5小时流速上限")}</dt><dd class="table-num">~15% / 5h</dd></div>
-              <div><dt>${esc(L.paramFutureWindows || "续费前待开窗口数")}</dt><dd class="table-num">${proj ? `${proj.naturalOpenings || 0} 份` : "—"}</dd></div>
-              <div><dt>${esc(L.paramUntilRenewal || "续费前还能拿总额")}</dt><dd class="table-num">${proj?.allowance ? usd(proj.allowance) : "—"}</dd></div>
-              <div><dt>${esc(L.paramResetIn || "距离重置时间")}</dt><dd class="table-num">${resetInDays} 天</dd></div>
-            </dl>
-          </div>
         </div>
       </details>
     `;

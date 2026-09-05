@@ -765,6 +765,17 @@ async function runScenarioAssertions() {
         .filter((x) => x.startsWith("gpt-5.6-sol"));
       const perTurn = sol.map((x) => x.match(/(\$[\d.]+)\/turn$/)?.[1]).filter(Boolean);
       expect("speed rows use one turn-allocation rule", perTurn.length === 2 && perTurn[0] === perTurn[1], perTurn.join(" vs "));
+
+      root.querySelector(".master-ledger").open = true;
+      root.querySelector("[data-day-drill]").click();
+      const drill = root.querySelector(".sub-row.is-open");
+      const rows = [...drill.querySelector("table").tBodies[0].rows];
+      const names = rows.map((row) => row.cells[0].textContent.trim());
+      expect("daily drilldown distinguishes speed tiers", names.includes("gpt-5.6-sol") && names.includes("gpt-5.6-sol · fast"), names.join(" | "));
+      expect("English drilldown is localized", !/[\u3400-\u9fff]/.test(drill.textContent), drill.textContent.trim());
+      const amounts = rows.map((row) => Number(row.cells[1].textContent.replace("$", "")));
+      const dayTotal = Number(drill.previousElementSibling.cells[1].textContent.replace("$", ""));
+      expect("daily model amounts reconcile to day total", Math.abs(amounts.reduce((sum, n) => sum + n, 0) - dayTotal) < 0.02);
     }
 
     if (MODE === "unknownmodel") {
@@ -911,7 +922,7 @@ async function runAllAssertions() {
   for (const mode of ALL_MODES) {
     const frame = document.createElement("iframe");
     frame.style.cssText = "position:absolute;left:-10000px;width:1200px;height:800px;border:0";
-    frame.src = `${location.pathname}?assert=1#${mode}`;
+    frame.src = `${location.pathname}?assert=1&smoke=${performance.timeOrigin}#${mode}`;
     document.body.appendChild(frame);
 
     let result = null;
