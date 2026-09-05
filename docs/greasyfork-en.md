@@ -13,6 +13,11 @@ This panel works it out.
 - What a turn costs you. What a thousand lines of code costs you.
 - Which day, which model and which surface ate the most
 
+The desktop panel keeps quota status at the top and the billing-period summary below it.
+Switch **Current window / This subscription** within usage analysis to update its subtotal,
+metrics, four aligned charts and usage details together. The quota status, subscription-cost
+input and billing summary stay in place. Forecast calculations and window history expand below.
+
 ### How
 
 The usage endpoint returns one of three shapes: a 5-hour bar beside a 7-day bar, a 7-day
@@ -47,8 +52,8 @@ turned into a dollar ceiling, because usage only arrives in whole days. Some pla
 gives way it tells you and shows nothing, because a confident wrong number is worse than a
 blank.
 
-Solid means measured. Dashed amber means worked out. You always know which one you are
-looking at.
+Measured values and inferred capacity are labelled separately; dashed lines and hatched
+segments identify projections in the dark green interface.
 
 ### Privacy
 

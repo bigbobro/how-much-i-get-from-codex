@@ -9,9 +9,9 @@ The official page may show two bars now — a short *5-hour usage limit* and a *
 limit*. Their percentages answer different questions, and the API does not put a dollar
 denominator beside either one. This reads both windows and keeps their meanings separate.
 
-![](docs/panel.jpg)
+![Desktop panel with quota status, a billing-period summary and four aligned usage charts](docs/panel.jpg)
 
-<sub>A clean, high-density dark instrument panel (Mosaic Tiles) in OKLCH sage palette: measured figures in solid sage, inferred ones hatched, with dual-view time-series charts and drill-down audit ledger.</sub>
+<sub>A single-page desktop panel: quota status at the top, a billing-period summary, and four equal-width usage charts. Preview uses recorded test data.</sub>
 
 For anyone on Plus, Pro, Business or Team who uses Codex enough to wonder what the
 subscription is really worth.
@@ -28,7 +28,24 @@ running after you close it.
 - How much more opens before your subscription renews (full grants)
 - What a turn costs, what 1,000 lines of code cost, and cache hit rates
 - Which day, which model, and which surface took the most
-- **Interactive Master Ledger**: Daily breakdown with model and speed-tier drill-down, plus model totals for the selected range
+- **Usage details**: Daily breakdown with model and speed-tier drill-down, plus model totals for the selected range
+
+## Panel layout in 4.2.0
+
+The panel is designed for desktop browsers, with one page and a shared column grid:
+
+- **Quota status** stays at the top, showing the available 5-hour and 7-day limits and reset times.
+- **Billing-period summary** shows the API-equivalent value used in the real billing period,
+  the subscription-cost input and payback ratio, and the estimated capacity left before renewal.
+- **Usage analysis** has its own **Current window / This subscription** selector. Its subtotal,
+  dates, metrics, charts and usage details all follow that range. The quota status and
+  billing-period summary stay unchanged when you switch.
+- **Daily spend, token costs, models and surfaces** sit in four equal-width columns on a wide
+  desktop window. Forecast calculations, current-window details and history expand below them.
+
+When the billing period is unavailable, analysis uses a valid current window. Placeholder
+windows cannot be selected; if neither range is known, the panel explains what is missing
+without inventing a date range or subtotal.
 
 ---
 
@@ -137,7 +154,7 @@ whenever the ground under it gives way:
 
 - **The window is shorter than a day.** That only happens as the 5-hour half of a dual-window
   account. The percentage is shown as a short-term status but not converted into a dollar
-  ceiling; the weekly window still supplies the cycle and subscription view.
+  ceiling; the weekly window still supplies current-window analysis and the subscription forecast.
 - **The window never opens.** 0% used with a reset that slides forward is a placeholder. The
   measured allowance and the spending still stand; the cycle boundaries and everything
   counted off them are hidden.
@@ -212,7 +229,7 @@ the plan and the account email. One personal plus one workspace subscription can
 by structure; several active subscriptions of the same structure are treated as ambiguous,
 with no per-seat local history written until the seat can be identified. When the API leaves
 `account_id` empty, the renewal-date choice is stored locally for that email and plan and can
-be changed from the subscription view.
+be changed from the billing-period summary.
 
 Every request carries `workspace_user=true`, so the figures cover the current seat only.
 
@@ -245,15 +262,16 @@ pages. Arriving there through the sidebar is enough — no extra reload.
 python3 -m http.server 8731
 ```
 
-Open `http://127.0.0.1:8731/smoketest.html?all=1` to run all deterministic assertions. The
+Open `http://127.0.0.1:8731/smoketest.html?preview=1#multi` for a desktop preview, or
+`http://127.0.0.1:8731/smoketest.html?all=1` to run all 30 scenario checks. The
 harness freezes the clock, cache-busts the userscript, checks the seven expected requests,
 rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 
 | Scenario | What it covers |
 |---|---|
-| *(default)* | window-percent fallback, period source label, view/language focus, close/Escape/backdrop focus restoration |
+| *(default)* | window-percent fallback, fixed period summary, analysis/language focus, close/Escape/backdrop focus restoration |
 | `#personal` | Plus-style: the workspace breakdown 400s, allowance measured at **$199.59** |
-| `#spill` | billing period opens inside an unfetchable window — its in-period spend must show as a truncated row, and the table total must equal the headline **$209.57** |
+| `#spill` | period **$209.57** vs current window **$29.94**; switching keeps the summary, price input and quota fixed while all analysis totals reconcile; the opening window is clipped to the period |
 | `#currentspill` | the live window crosses the billing-period start — current row and total are clipped to **$149.90** |
 | `#multi` | 7-day window, a completed cycle, multi-opening forecast |
 | `#boundary` | windows opening at 06:00 UTC — segments must partition the days exactly |
@@ -267,14 +285,17 @@ rejects userscript console errors, and prints one PASS/FAIL line per scenario.
 | `#twosubs` | one login, two subscriptions — the panel must name which one it reports |
 | `#sameworkspaces` | two matching workspace subscriptions — asks for the renewal date, no per-seat memory write before selection |
 | `#samepersonals` | two matching personal subscriptions — choosing 08/18 refetches and totals the real 07/18 → 08/18 period |
-| `#fresh` | placeholder window |
+| `#fresh` | a real window has just reset; empty current-window analysis preserves the billing summary and can switch back to period data |
 | `#fast` | standard/fast turn allocation uses credit share; unknown multipliers remain flagged |
-| `#noent` | no renewal date — withholds the subscription view rather than substituting a calendar month |
+| `#noent` | no renewal date — withholds billing-period figures and retains valid current-window analysis |
 | `#zerobasis` | the latest completed zero-spend window remains visible as history |
 | `#rates` | current Terra, Luna and GPT-Image-2 text-token rates |
-| `#projection` | placeholder window keeps measured spend and completed-day average (descriptive only), but no uncapped projection |
+| `#projection` | placeholder window cannot be selected; real billing-period spend and completed-day average remain available, with no uncapped projection |
+| `#projectionnoent` | placeholder window and no billing information — live quota status stays visible, with no fabricated analysis range or subtotal |
 | `#surfaces` | one metered day split 50 / 30 / 20 across CLI, VS Code and web; total **$99.80** |
 | `#dual` | the 5-hour + 7-day shape; weekly correction, timestamp-based three-window formula, and a separate reset-card term |
+| `#thinweek` / `#thinprev` | the recent weekly reading remains authoritative; a remembered completed window stays a fallback |
+| Additional viewport checks | `#dual` and `#samepersonals` at 390px, and `#fast` at 768px, retain basic overflow and focus checks |
 
 The default case still reproduces the recorded **$249.83 spent / $250.00 allowance**. The
 suite also checks every panel for `NaN` / `undefined` and verifies that all window-table

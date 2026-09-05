@@ -2,7 +2,7 @@
 // @name         How Much I Get From Codex
 // @name:zh-CN   How Much I Get From Codex · 你从 Codex 到底拿到多少
 // @namespace    https://github.com/bigbobro
-// @version      4.1.2
+// @version      4.2.0
 // @homepageURL  https://github.com/bigbobro/how-much-i-get-from-codex
 // @supportURL   https://github.com/bigbobro/how-much-i-get-from-codex/issues
 // @downloadURL  https://github.com/bigbobro/how-much-i-get-from-codex/raw/main/how-much-i-get-from-codex.user.js
@@ -33,8 +33,8 @@
  * current rate card prices days without them. When a reported total contains an unknown
  * model, the known rows keep their priced amounts and the remainder stays explicitly
  * unattributed instead of being hidden in those rows. Everything downstream of a window
- * percentage division is an estimate, and the interface says so — solid blue is measured,
- * dashed amber is inferred.
+ * percentage division is an estimate, and the interface says so — solid fills are measured,
+ * dashed markers identify inferred values.
  *
  * Nothing is requested until you open the panel. No background polling.
  */
@@ -105,7 +105,7 @@
   const USD_PER_CREDIT = 0.04;
   // Keep in lockstep with @version. GM_info wins when the host injects it, so the
   // panel shows the installed copy rather than whatever this source last said.
-  const SCRIPT_VERSION = "4.1.2";
+  const SCRIPT_VERSION = "4.2.0";
 
   const DAY_MS = 86400000;
   const LANG_KEY = "hmig-lang";
@@ -145,9 +145,14 @@
       subscriptionFormula: (spent, left, total, extras, windows, weekly) =>
         `Subscription capacity = spent ${spent} + ${windows} ${weekly ? "weekly window" + (windows === 1 ? "" : "s") : "allowance" + (windows === 1 ? "" : "s")} still available ${left}${extras ? ` + ${extras}` : ""} = ${total}.`,
 
-      cycle: "This usage window",
-      cycleWeekly: "Current week",
       period: "This subscription",
+      analysis: "Usage analysis",
+      analysisSpent: "Measured subtotal",
+      analysisUnavailable: "Usage analysis needs a real window or subscription period.",
+      periodMeasuredValue: "API-equivalent value used this billing period",
+      currentWindow: "Current window",
+      currentWindowDetails: "Current window · amount and limits",
+      forecastDetails: "Subscription forecast · calculation and windows",
 
       spent: "Spent",
       ceiling: "Ceiling",
@@ -198,8 +203,6 @@
       resetInPre: "resets in",
       resetInPost: "days",
 
-      untilRenewal: "Left before renewal",
-      renewalOn: (d) => `renews ${d}`,
       renewalMath: (a, n, l, partial) =>
         `${a} left in this usage window, then ${n} more allowance${n > 1 ? "s" : ""} of about ${l}` +
         (partial ? " — a window hands over the whole amount even with days left to spend it" : ""),
@@ -218,11 +221,6 @@
       resetCardsAvail: (n, a) => `${n} reset card${n === 1 ? "" : "s"} left, about ${a}`,
       narrWindows: (n, resets, one) => `About ${n} usage windows this period: one already open when it began, then ${resets} more roll${resets === 1 ? "" : "s"} — a floor, since early resets only add. Each estimated at today's ${one}; past windows may have been larger, so do not multiply older spend by it.`,
       periodNoReset: "one usage window — it did not roll inside the billing period",
-      periodCardSpent: "spent this billing period",
-      periodCardOne: "one allowance now",
-      periodCardOneSub: "this usage window only — not the whole period average",
-      periodCardOneWeekly: "current weekly allowance",
-      periodCardOneSubWeekly: "the 7-day allowance used for the weekly correction — not a period average",
       periodCardLeft: "still obtainable before renewal",
       periodCardLeftSub: "at today's allowance size — a ceiling on grants, not a spend forecast",
       remainingStack: "What you can still draw before renewal",
@@ -248,7 +246,6 @@
       chartBarPast: "past window spend",
       chartBarNow: "this window",
       chartLineSpend: "cumulative $",
-      renewalUnknown: "Needs a ceiling before it can project",
       narrCap: (cap, spent, left) => `The period tops out at ${cap}: ${spent} already spent (measured) plus ${left} still to open (inferred).`,
       projWindowOnly: "Projection uses the current allowance and the windows that open before renewal; it does not extend a daily average.",
       projEarly: "Less than a fifth of the period has gone; this is a coarse extrapolation",
@@ -291,7 +288,6 @@
       cycleMemClearConfirm:
         "Clear the remembered usage windows for this subscription on this browser? This cannot be undone.",
       cycleMemEmpty: "No local history yet — each finished usage window is saved here when a new one opens.",
-      gaugeAria: (a, b, isMeasured) => `spent ${a} of ${isMeasured ? "a measured" : "an inferred"} ${b} ceiling`,
 
       payback: "Payback",
       paybackPaidLead: "paid",
@@ -302,11 +298,7 @@
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "Measured over the real billing period rather than the calendar month. The allowance resets on its own clock, so only the billing period answers what one payment buys.",
-      activeDays: "Days with usage",
-      dailyAvg: "Average on completed days (descriptive)",
-      turnsTotal: (n) => `${n} turns`,
 
-      cTotal: "Total",
       cPerTurn: "Per turn",
       cPerKLoc: "Per 1000 lines added",
       cPriciestDay: "Priciest day",
@@ -404,9 +396,14 @@
       subscriptionFormula: (spent, left, total, extras, windows, weekly) =>
         `本期订阅可花额度 = 已花 ${spent} + 剩余 ${windows}${weekly ? " 个周窗口" : " 份额度"}未花 ${left}${extras ? ` + ${extras}` : ""} = ${total}。`,
 
-      cycle: "当前用量窗口",
-      cycleWeekly: "当前周用量",
       period: "本期订阅",
+      analysis: "用量分析",
+      analysisSpent: "实测小计",
+      analysisUnavailable: "需要有效的用量窗口或订阅周期才能分析用量。",
+      periodMeasuredValue: "本期已用 API 等价值",
+      currentWindow: "当前窗口",
+      currentWindowDetails: "当前窗口 · 金额与上限明细",
+      forecastDetails: "订阅推算 · 计算与窗口明细",
 
       spent: "已花",
       ceiling: "额度",
@@ -455,8 +452,6 @@
       resetInPre: "还有",
       resetInPost: "天重置",
 
-      untilRenewal: "续费前还能拿",
-      renewalOn: (d) => `${d} 续费`,
       renewalMath: (a, n, l, partial) =>
         `当前用量窗口还剩 ${a}，之后还会开出 ${n} 份额度，每份约 ${l}` +
         (partial ? " —— 窗口一开就是满额发放，哪怕只剩几天用" : ""),
@@ -475,11 +470,6 @@
       resetCardsAvail: (n, a) => `重置券还剩 ${n} 张，约 ${a}`,
       narrWindows: (n, resets, one) => `这一期共约 ${n} 份额度：期初已开着 1 份，之后再滚 ${resets} 次；次数是下限，提前 reset 只会更多。每份按今天的 ${one} 估 —— 过去的窗可能更大，别拿它去乘历史花费。`,
       periodNoReset: "一个用量窗口 —— 账期内没有再滚",
-      periodCardSpent: "本期已花",
-      periodCardOne: "当前一份额度",
-      periodCardOneSub: "只描述当前用量窗口，不是整期平均",
-      periodCardOneWeekly: "当前周额度",
-      periodCardOneSubWeekly: "用于 7 天额度校正，不是整期平均",
       periodCardLeft: "续费前还能拿",
       periodCardLeftSub: "按今天的一份大小估 —— 是能拿的上限，不是会花的预测",
       remainingStack: "续费前还能动用的",
@@ -505,7 +495,6 @@
       chartBarPast: "已过窗口花费",
       chartBarNow: "当前窗口",
       chartLineSpend: "累计 $",
-      renewalUnknown: "要先推算出额度才能往后推",
       narrCap: (cap, spent, left) => `整期最多到 ${cap}：已花掉的 ${spent} 是实测，续费前还能开出的 ${left} 是推算。`,
       projWindowOnly: "按当前额度、当前窗口剩余和续费前会开的窗口推算，不按日均往后外推。",
       projEarly: "账期才过了不到两成，这个外推还很粗",
@@ -547,7 +536,6 @@
       cycleMemClear: "清除本订阅的本地记录",
       cycleMemClearConfirm: "清除本浏览器里这份订阅的用量窗口记录？清除后无法恢复。",
       cycleMemEmpty: "还没有本地记录 —— 等新的用量窗口打开时，会把刚结束的那一份记在这里。",
-      gaugeAria: (a, b, isMeasured) => `已花 ${a}，${isMeasured ? "实测" : "推算"}额度 ${b}`,
 
       payback: "回本",
       paybackPaidLead: "付了",
@@ -558,11 +546,7 @@
       periodSpan: (a, b) => `${a} → ${b}`,
       periodWhy:
         "按真实账期算，不按自然月。额度按自己的时钟重置，所以要问一次付费买到了什么，只能按账期算。",
-      activeDays: "有用量的天数",
-      dailyAvg: "已完成日均（仅描述）",
-      turnsTotal: (n) => `共 ${n} turns`,
 
-      cTotal: "总花费",
       cPerTurn: "平均每 turn",
       cPerKLoc: "每千行新增代码",
       cPriciestDay: "花得最多的一天",
@@ -1375,7 +1359,6 @@
     const topTurnModel = models.filter((m) => m.turns > 0).sort((a, b) => b.credits / b.turns - a.credits / a.turns)[0];
 
     const cards = [
-      { label: L.cTotal, value: usd(s.credits), sub: `${int(s.credits)} credits` },
       {
         label: L.cPerTurn,
         value: s.turns ? usd(s.credits / s.turns) : "—",
@@ -1467,7 +1450,7 @@
     unpricedFast: [],
     fetchedFrom: "",
     freshnessMs: 0,
-    view: "cycle", // cycle | period
+    view: "period", // analysis scope: cycle | period | empty when neither range is available
     loaded: false,
     loading: false,
     error: "",
@@ -1662,6 +1645,7 @@
   }
 
   const hasRenewalDate = () => Number.isFinite(state.ent?.renewsAt);
+  const hasCurrentWindow = () => !!state.win && !state.win.placeholder;
 
   // The real billing period when known. The fallback exists only to bound the initial fetch;
   // sheetHtml never presents it as a subscription period.
@@ -1749,13 +1733,15 @@
 
   function viewRange() {
     const today = dayKey(Date.now());
-    if (state.view === "cycle" && state.win) return { from: dayKey(state.win.startAt), to: today };
-    const p = periodRange();
-    return { from: p.from, to: today };
+    if (state.view === "cycle" && hasCurrentWindow()) return { from: dayKey(state.win.startAt), to: today };
+    if (state.view === "period" && hasRenewalDate()) return { from: periodRange().from, to: today };
+    return null;
   }
 
   function currentSlice() {
-    const { from, to } = viewRange();
+    const range = viewRange();
+    if (!range) return null;
+    const { from, to } = range;
     const days = state.days.filter((d) => d.date >= from && d.date <= to);
     return { days, s: summarize(days), from, to };
   }
@@ -2148,425 +2134,311 @@
    *   amber = inferred by this script, and always drawn dashed
    */
   const CSS = `
-    /* Hallmark · Mosaic Tiles · Direction 3 */
     :host {
-      --bg: oklch(0.155 0.006 155);
-      --bg-panel: oklch(0.195 0.008 155);
-      --bg-tile: oklch(0.225 0.010 155);
-      --bg-tile-sub: oklch(0.210 0.009 155);
-      --bg-raised: oklch(0.265 0.012 155);
-      --bg-track: oklch(0.285 0.012 155);
-      --line: oklch(0.340 0.014 155);
-      --line-strong: oklch(0.430 0.016 155);
-      --ink: oklch(0.930 0.012 150);
-      --ink-2: oklch(0.820 0.016 150);
-      --ink-3: oklch(0.660 0.018 150);
-      --ink-dim: oklch(0.740 0.020 150);
-      --ink-faint: oklch(0.660 0.018 150);
-      --color-accent: oklch(0.760 0.070 152);
-      --color-accent-ink: oklch(0.200 0.012 152);
-      --accent-dim: oklch(0.640 0.055 152);
-      --hatch: oklch(0.540 0.048 152);
-      --seg-a: oklch(0.760 0.070 152);
-      --seg-b: oklch(0.660 0.055 138);
-      --seg-c: oklch(0.560 0.042 168);
-      --ring: oklch(0.820 0.075 152);
+      --bg: #101312;
+      --bg-panel: #171b19;
+      --bg-raised: #242b27;
+      --bg-track: #2b342e;
+      --line: #303a33;
+      --line-strong: #46554a;
+      --ink: #eff3ed;
+      --ink-2: #c8d2c9;
+      --ink-3: #9aa99d;
+      --ink-dim: #b1beb3;
+      --ink-faint: #97a69a;
+      --color-accent: #bbdfad;
+      --color-accent-ink: #1b2b18;
+      --accent-dim: #7f9f76;
+      --measured: var(--color-accent);
+      --measured-soft: #74946c;
+      --inferred: #aaba9f;
+      --inferred-text: #ccd8c3;
+      --rule: var(--line);
+      --alarm: #f2ad9b;
       --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      
-      /* Semantic aliases for backwards compatibility with tests and components */
-      --measured: var(--color-accent);
-      --measured-soft: var(--accent-dim);
-      --inferred: var(--accent-dim);
-      --inferred-text: var(--color-accent);
-      --rule: var(--line);
-      --amber: var(--accent-dim);
-      --amber-bg: var(--bg-tile-sub);
-      --alarm: oklch(0.70 0.18 25);
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
-    
-    .trigger {
-      position: fixed;
-      top: 66vh;
-      right: 18px;
-      z-index: 2147483646;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 14px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--bg-panel);
-      color: var(--ink);
-      font-family: var(--font-sans);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-      transition: background 140ms ease-out, border-color 140ms ease-out, transform 140ms ease-out;
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button, summary, input { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, summary:focus-visible, input:focus-visible, .scroll:focus-visible, .chart-viewport:focus-visible {
+      outline: 2px solid var(--color-accent); outline-offset: 4px;
     }
-    .trigger:hover { background: var(--bg-raised); border-color: var(--color-accent); color: var(--ink); transform: translateY(-1px); }
-    .trigger:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-    .trigger:active { transform: translateY(1px); }
-    .trigger.busy { opacity: 0.7; cursor: wait; }
-    .trigger.busy .trigger-name { color: var(--ink-dim); }
-    .trigger-ps { color: var(--color-accent); font-family: var(--mono); font-weight: 700; }
-    .cursor::after { content: "▮"; color: var(--color-accent); font-family: var(--mono); animation: blink 1s step-end infinite; }
-    @keyframes blink { 50% { opacity: 0; } }
-    
+    button:disabled { opacity: .5; cursor: wait; }
+    .trigger {
+      position: fixed; top: 66vh; right: 18px; z-index: 2147483646;
+      display: flex; align-items: center; gap: 10px; padding: 11px 16px;
+      border: 1px solid var(--line-strong); border-radius: 12px;
+      background: var(--bg-panel); color: var(--ink); font: 500 13px var(--font-sans);
+      box-shadow: 0 6px 24px #0004;
+      transition: background 160ms, transform 160ms;
+    }
+    .trigger:hover { background: var(--bg-raised); transform: translateY(-2px); }
+    .trigger-ps { color: var(--color-accent); font: 600 17px var(--mono); }
+    .trigger.busy { opacity: .7; cursor: wait; }
+    .trigger[aria-expanded="true"] { visibility: hidden; }
     .scrim {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.65);
-      backdrop-filter: blur(4px);
-      z-index: 999999;
-      display: grid;
-      place-items: center;
-      padding: 24px 16px;
-      overflow-y: auto;
+      position: fixed; inset: 0; z-index: 2147483646; display: grid; place-items: center;
+      padding: 28px; background: #060a08b8; backdrop-filter: blur(8px);
+      overscroll-behavior: contain;
     }
     .panel {
-      width: 100%;
-      max-width: 880px;
-      background: var(--bg-panel);
-      color: var(--ink);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
-      font-family: var(--font-sans);
-      font-size: 14px;
-      line-height: 1.5;
-      outline: none;
+      width: 100%; max-width: 1160px; max-height: 100%; min-height: 0;
+      display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-panel); color: var(--ink); border: 1px solid var(--line);
+      border-radius: 20px; box-shadow: 0 24px 100px #0006;
+      font: 14px/1.55 var(--font-sans); outline: none;
     }
-    
-    .num, .amount, .gauge-fig, .forecast-fig, .stat-fig, .n, .v, .svg-text-num {
-      font-variant-numeric: tabular-nums;
+    .panel.is-opening { animation: panel-enter 220ms ease-out; }
+    @keyframes panel-enter { from { opacity: 0; transform: translateY(12px) scale(.99); } to { opacity: 1; transform: none; } }
+    .num, .amount, .n, .v, .window-percent { font-variant-numeric: tabular-nums; }
+    .masthead { flex: none; display: flex; align-items: center; gap: 24px; padding: 25px 32px 20px; }
+    .identity { min-width: 0; flex: 1; }
+    .wordmark { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -.7px; line-height: 1.3; }
+    .wordmark em { color: var(--color-accent); font-style: normal; font-weight: 450; }
+    .subhead { margin-top: 7px; font-size: 11px; color: var(--ink-faint); overflow-wrap: anywhere; }
+    .version { margin-left: 5px; color: var(--ink-dim); }
+    .controls { display: flex; align-items: center; gap: 8px; flex: none; }
+    .seg { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; }
+    .seg button { appearance: none; border: 0; border-radius: 5px; padding: 5px 9px; background: transparent; color: var(--ink-faint); font-size: 12px; }
+    .seg button[aria-pressed="true"] { background: var(--bg-raised); color: var(--ink); }
+    .ghost { appearance: none; width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-dim); font-size: 20px; line-height: 1; transition: background 140ms, color 140ms; }
+    .ghost:hover { background: var(--bg-raised); color: var(--ink); }
+    .analysis-section, #analysis-content { display: grid; gap: 24px; min-width: 0; }
+    .analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+    .analysis-heading h2 { margin: 0; }
+    .analysis-scope { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; }
+    .analysis-subtotal { color: var(--ink); font-size: 24px; font-weight: 500; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+    .analysis-scope .view-range { margin-left: auto; }
+    .current-window > .verdict:first-child { margin-top: 0; }
+    .current-window-details .gauge-head { justify-content: flex-start; gap: 18px 48px; margin-bottom: 14px; }
+    .current-window-details .gauge-head .right { text-align: left; }
+    .current-window-details .amount { font-size: 25px; letter-spacing: -.7px; margin-top: 4px; }
+    .detail-disclosure { border-top: 1px solid var(--line); color: var(--ink-dim); font-size: 12px; }
+    .detail-disclosure > summary { padding-top: 16px; cursor: pointer; }
+    .disclosure-body { display: grid; gap: 22px; padding-top: 22px; }
+    .disclosure-body .formula-note { margin: 0; padding: 0; border: 0; }
+    .payback .readout { font-size: 11px; }
+    .summary-card.infer .amount { color: var(--ink-2); font-size: 25px; }
+    .view-tabs { display: flex; gap: 26px; }
+    .view-tabs button { position: relative; appearance: none; padding: 13px 0; border: 0; background: transparent; color: var(--ink-faint); font-size: 13px; white-space: nowrap; transition: color 150ms; }
+    .view-tabs button:hover { color: var(--ink); }
+    .view-tabs button[aria-pressed="true"] { color: var(--color-accent); font-weight: 600; }
+    .view-tabs button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--color-accent); }
+    .view-range { color: var(--ink-faint); font: 11px var(--mono); white-space: nowrap; }
+    .sheet { --section-columns: minmax(0, 2fr) minmax(0, 1fr); --column-gap: 48px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 30px 32px; display: flex; flex-direction: column; gap: 28px; }
+    .sheet > *, .analysis-grid > *, .period-detail-grid > * { min-width: 0; }
+    h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; letter-spacing: -.15px; }
+    h2 em { display: block; margin-top: 4px; font-size: 11px; font-style: normal; font-weight: 400; letter-spacing: 0; color: var(--ink-faint); }
+    .eyebrow { color: var(--ink-faint); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+    .is-inferred, .inf { color: var(--inferred-text); }
+    .eyebrow.is-inferred::before { content: ""; display: inline-block; width: 7px; height: 7px; border: 1px dashed currentColor; margin-right: 6px; }
+    .hint, .section-note { margin: 0; color: var(--ink-faint); font-size: 11px; line-height: 1.65; }
+    .readout { display: flex; flex-wrap: wrap; gap: 5px 16px; color: var(--ink-dim); font-size: 12px; }
+    .readout b { color: var(--ink); font-weight: 550; }
+    .period-detail-grid { display: grid; grid-template-columns: var(--section-columns); column-gap: var(--column-gap); row-gap: 24px; }
+
+    .period-detail-grid > :nth-child(2) { position: relative; }
+    .period-detail-grid > :nth-child(2)::before {
+      content: ""; position: absolute; left: calc(var(--column-gap) / -2); top: 0; bottom: 0; width: 1px; background: var(--line);
     }
-    
-    /* Header */
-    .masthead {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--line);
-    }
-    .wordmark {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 650;
-      letter-spacing: 0.01em;
-    }
-    .wordmark em { font-style: normal; font-weight: normal; color: var(--ink-dim); }
-    .subhead {
-      margin: 4px 0 0;
-      font-size: 10.5px;
-      letter-spacing: 0.04em;
-      color: var(--ink-faint);
-    }
-    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .seg {
-      display: flex;
-      gap: 4px;
-      padding: 4px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-    .seg button {
-      appearance: none;
-      border: 0;
-      border-radius: 6px;
-      padding: 4px 12px;
-      background: transparent;
-      color: var(--ink-dim);
-      font: inherit;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background 140ms ease-out, color 140ms ease-out;
-    }
-    .seg button:hover { color: var(--ink); }
-    .seg button[aria-pressed="true"] {
-      background: var(--bg-raised);
-      color: var(--ink);
-      font-weight: 600;
-    }
-    .ghost {
-      appearance: none;
-      width: 28px;
-      height: 28px;
-      display: grid;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--ink-dim);
-      font: inherit;
-      font-size: 14px;
-      line-height: 1;
-      cursor: pointer;
-      transition: border-color 140ms ease-out, color 140ms ease-out;
-    }
-    .ghost:hover { color: var(--ink); border-color: var(--line-strong); }
-    
-    /* Sheet & Rules */
-    .sheet { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
-    .rule { height: 1px; background: var(--line); margin: 4px 0; }
-    .rule.major { height: 1px; background: var(--line-strong); margin: 8px 0; }
-    
-    /* Window Status */
-    .window-status {
-      padding: 12px 16px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-    .window-status h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
-    .window-status-note { font-size: 11px; color: var(--ink-faint); margin-bottom: 12px; }
-    .window-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-    .window-status-card {
-      padding: 10px 14px;
-      background: var(--bg-tile-sub);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .window-percent { font-size: 20px; font-weight: 700; color: var(--color-accent); font-variant-numeric: tabular-nums; }
-    .readout { font-size: 11px; color: var(--ink-dim); display: flex; flex-wrap: wrap; gap: 8px; }
-    .readout span { display: inline-flex; align-items: center; gap: 4px; }
-    .hint { font-size: 10.5px; color: var(--ink-faint); }
-    
-    /* Gauge Header */
-    .gauge-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 12px;
-      padding: 16px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-    .gauge-head .amount { font-size: 32px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-    .gauge-head .amount.small { font-size: 28px; }
+    .gauge-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 28px; }
+    .amount { font-size: clamp(38px, 4vw, 54px); line-height: 1.15; letter-spacing: -2px; font-weight: 500; margin-top: 9px; }
+    .amount.small { font-size: 30px; letter-spacing: -1px; }
     .gauge-head .right { text-align: right; }
-    .eyebrow { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.05em; text-transform: uppercase; }
-    .eyebrow.is-inferred { color: var(--accent-dim); }
-    
-    /* Track & Bar */
-    .gauge {
-      padding: 12px 16px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .track {
-      position: relative;
-      height: 16px;
-      background: var(--bg-track);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .track .fill {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: calc(var(--fill) * 100%);
-      background: var(--color-accent);
-      border-radius: 8px;
-    }
-    .ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-faint); }
-    .legend-key { display: flex; gap: 12px; font-size: 11px; color: var(--ink-dim); margin-top: 4px; }
+    .gauge-head .right .eyebrow:last-child { max-width: 240px; }
+
+    .legend-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: 10px; color: var(--ink-faint); }
     .legend-key span { display: inline-flex; align-items: center; gap: 6px; }
-    .key-solid { width: 8px; height: 8px; background: var(--color-accent); border-radius: 2px; display: inline-block; }
-    .key-solid.soft { background: var(--accent-dim); }
-    .key-dash { width: 8px; height: 8px; border: 1px dashed var(--accent-dim); border-radius: 2px; display: inline-block; }
-    .key-line { width: 12px; height: 2px; background: var(--ink); display: inline-block; }
-    .key-line.dash { background: transparent; border-top: 2px dashed var(--accent-dim); }
-    
-    .verdict { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-dim); }
-    .verdict.alarm { color: oklch(0.70 0.18 25); font-weight: 600; }
-    
-    /* Forecast */
-    .forecast {
-      padding: 16px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      justify-content: space-between;
-    }
-    .forecast .amount.small { font-size: 24px; font-weight: 700; color: var(--color-accent); font-variant-numeric: tabular-nums; }
-    .cost-line { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-    .cost-input {
-      width: 90px;
-      padding: 4px 8px;
-      background: var(--bg-panel);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      color: var(--ink);
-      font: inherit;
-      font-size: 12px;
-    }
-    
-    /* Cards Grid */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-    .cell {
-      padding: 12px 14px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .cell .k { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.04em; text-transform: uppercase; }
-    .cell .k.is-inferred { color: var(--accent-dim); }
-    .cell .v { font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-    .cell .s { font-size: 11px; color: var(--ink-faint); }
-    
-    /* Split Horizontal Bar */
-    .split-bar { height: 18px; border-radius: 6px; overflow: hidden; display: flex; background: var(--bg-track); margin: 8px 0 12px; }
-    .split-bar i { height: 100%; display: block; }
-    .split-bar .a { background: var(--seg-b); }
-    .split-bar .b { background: var(--seg-a); }
-    .split-bar .c { background: var(--seg-c); }
-    
-    /* Charts & SVG */
-    .chart {
-      padding: 16px;
-      background: var(--bg-tile);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-    .chart h2, .section-head h2 { margin: 0 0 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
-    .chart h2 em, .section-head em { font-style: normal; font-weight: normal; color: var(--ink-faint); font-size: 11px; margin-left: 8px; }
+    .key-solid { display: inline-block; width: 8px; height: 8px; border-radius: 1px; background: var(--measured); }
+    .key-solid.soft { background: var(--measured-soft); }
+
+    .key-line { width: 14px; border-top: 2px solid var(--ink); }
+    .key-line.dash { border-top: 2px dashed var(--inferred); }
+    .verdict { margin: 12px 0; font-size: 12px; color: var(--ink-dim); }
+    .verdict.alarm { padding: 12px 14px; border-left: 2px solid var(--alarm); background: #f2ad9b09; color: var(--alarm); }
+    .window-status { flex: none; padding: 0 32px 18px; border-bottom: 1px solid var(--line); }
+    .window-status-heading { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+    .window-status h2 { flex: none; font-size: 12px; margin: 0; }
+    .window-status-note { color: var(--ink-faint); font-size: 10px; line-height: 1.6; }
+    .window-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+    .window-status-card { min-width: 0; }
+    .window-status-card:only-child { grid-column: 1 / -1; }
+    .window-status-card + .window-status-card { position: relative; }
+    .window-status-card + .window-status-card::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+    .window-status-value { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .window-percent { font-size: 21px; font-weight: 500; letter-spacing: -.6px; color: var(--color-accent); }
+    .window-status-card .readout { font-size: 11px; gap: 3px 12px; }
+    .window-status-card .hint { margin-top: 5px; font-size: 10px; }
+    .window-meter { height: 4px; background: var(--bg-track); border-radius: 2px; overflow: hidden; margin: 7px 0; }
+    .window-meter i { display: block; height: 100%; width: calc(var(--remaining) * 1%); background: var(--measured-soft); }
+
+    .cost-line { align-items: center; gap: 5px; margin: 5px 0; }
+    .cost-input { width: 90px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px 9px; background: var(--bg-panel); color: var(--ink); font-size: 12px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 22px 32px; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .cell { min-width: 0; }
+    .cell .k { color: var(--ink-faint); font-size: 11px; }
+    .cell .v { font-size: 25px; letter-spacing: -.6px; font-weight: 500; margin: 5px 0; }
+    .cell .s { font-size: 11px; color: var(--ink-faint); overflow-wrap: anywhere; }
+    .analysis-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 32px; }
+    .analysis-grid > * { position: relative; display: grid; grid-template-rows: subgrid; grid-row: span 2; }
+    .analysis-grid > * + *::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+    .analysis-grid h2 { margin-bottom: 0; }
+    .analysis-grid .rank-list { align-content: start; gap: 16px; }
+    .analysis-grid .bars { margin-top: 0; }
+    .analysis-grid .chart-viewport > svg { min-width: 0; max-height: 170px; }
+    .chart-viewport { overflow-x: auto; }
     .chart svg { display: block; width: 100%; height: auto; }
-    svg text {
-      font-family: var(--font-sans);
-      font-size: 11px;
-      fill: var(--ink-dim);
-    }
-    .chart text { fill: var(--ink-dim); }
-    .chart .label-strong, text.label-strong { fill: var(--ink); font-weight: 600; font-size: 11.5px; }
-    .chart .muted, text.muted { fill: var(--ink-faint); font-size: 10px; }
+    .chart-viewport > svg { min-width: 420px; }
+    svg text { font-family: var(--font-sans); font-size: 11px; fill: var(--ink-dim); }
     .chart line.axis { stroke: var(--line-strong); }
-    
-    /* Tables & Scroll */
-    .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-tile); }
-    .scroll table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
-    .scroll th, .scroll td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
-    .scroll th { background: var(--bg-tile-sub); color: var(--ink-faint); font-weight: 600; font-size: 10.5px; }
-    .scroll th.n, .scroll td.n { text-align: right; font-variant-numeric: tabular-nums; }
-    .scroll td.n.strong { font-weight: 600; color: var(--ink); }
-    
-    /* Drilldown Rows */
-    .row-toggle {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: var(--ink);
-      font: inherit;
-      font-size: 11px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      text-align: left;
-    }
+    .chart svg rect { transition: opacity 140ms; }
+    .chart svg rect:hover { opacity: .7; }
+    .rank-list { display: grid; gap: 18px; }
+    .rank-label, .rank-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .rank-label { font-size: 12px; }
+    .rank-label span { overflow-wrap: anywhere; }
+    .rank-label strong { font-weight: 550; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .rank-row svg { height: 5px; margin: 7px 0; border-radius: 2px; overflow: hidden; }
+    .rank-meta { color: var(--ink-faint); font-size: 10px; }
+    .bars, .stack-bar { display: flex; height: 8px; overflow: hidden; border-radius: 2px; gap: 3px; margin: 20px 0; background: var(--bg-track); }
+    .bars > div, .stack-seg { min-width: 0; }
+    .keys { display: grid; gap: 12px; font-size: 11px; color: var(--ink-dim); }
+    .keys > span { display: grid; grid-template-columns: 8px 1fr auto; align-items: baseline; column-gap: 8px; }
+    .keys b { font-weight: 500; color: var(--ink); }
+    .key-detail { grid-column: 2 / -1; color: var(--ink-faint); font-size: 10px; margin-top: 2px; }
+    .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 1px; }
+    .summary-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 24px; }
+    .summary-card .hint { margin-top: 7px; max-width: 250px; }
+    .formula-note { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.8; color: var(--ink-dim); }
+    .stack-keys { display: grid; gap: 13px; font-size: 11px; }
+    .stack-keys .row { display: flex; justify-content: space-between; gap: 16px; }
+    .stack-keys .lab { display: inline-flex; align-items: baseline; gap: 8px; color: var(--ink-dim); }
+    .stack-keys .val { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .stack-keys i { display: inline-block; flex: none; width: 7px; height: 7px; }
+    .stack-seg.window, .k-window { background: var(--color-accent); }
+    .stack-seg.natural, .k-natural { background: var(--measured-soft); }
+    .stack-seg.cards, .k-cards { background: repeating-linear-gradient(135deg, #aaba9f 0 2px, #3c493d 2px 4px); }
+    .stack-seg.credits, .k-credits { background: var(--ink-2); }
+    .stack-total-row { display: flex; justify-content: space-between; gap: 14px; font-size: 11px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink-dim); }
+    .stack-total-row b { color: var(--color-accent); font-size: 17px; font-weight: 500; white-space: nowrap; }
+    .period-footnotes { display: grid; gap: 8px; font-size: 11px; color: var(--ink-faint); }
+
+    .why { font-size: 11px; color: var(--ink-faint); margin-top: 10px; }
+    .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+    th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+    th { background: #1e2420; color: var(--ink-faint); font-size: 10px; font-weight: 500; }
+    tr:last-child > td { border-bottom: 0; }
+    tbody tr:hover { background: #ffffff03; }
+    th.n, td.n { text-align: right; }
+    td.strong { font-weight: 550; }
+    .cyc-note { color: var(--ink-faint); font-size: 11px; }
+    .cyc-now { background: #bbdfad07; }
+    .cyc-now .cyc-note { color: var(--color-accent); }
+    .cyc-ahead { color: var(--ink-faint); }
+    .cyc-total td { border-top: 1px solid var(--line-strong); }
+    .mem-foot { display: flex; align-items: baseline; gap: 16px; justify-content: space-between; margin-top: 10px; }
+    .mem-note { font-size: 11px; color: var(--ink-faint); margin: 0; }
+    .mem-clear { padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--ink-dim); font-size: 11px; white-space: nowrap; }
+    .row-toggle { appearance: none; border: 0; background: transparent; padding: 2px 0; color: var(--ink); font-size: 12px; display: inline-flex; align-items: center; gap: 8px; }
     .row-toggle:hover { color: var(--color-accent); }
-    .row-toggle .rchev { display: inline-block; font-size: 10px; color: var(--ink-faint); transition: transform 140ms ease-out; }
-    .row-toggle.is-open .rchev { transform: rotate(90deg); color: var(--color-accent); }
-    
-    .sub-row { display: none; background: var(--bg-tile-sub); }
+    .rchev, .chev { display: inline-block; color: var(--ink-faint); transition: transform 160ms; }
+    .row-toggle.is-open .rchev, .master-ledger[open] .chev { transform: rotate(90deg); }
+    .sub-row { display: none; background: #111612; }
     .sub-row.is-open { display: table-row; }
-    .drilldown-box { padding: 8px 12px 12px 28px; }
-    
-    /* Master Audit Ledger Drawer */
-    .master-ledger {
-      width: 100%;
-      border-top: 1px solid var(--line);
-      background: var(--bg-panel);
-    }
-    .ledger-sum {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 20px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--ink-dim);
-      cursor: pointer;
-      list-style: none;
-      user-select: none;
-      transition: color 140ms ease-out;
-    }
+    .drilldown-box { padding: 10px 4px 10px 14px; }
+    .master-ledger { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .ledger-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; list-style: none; }
     .ledger-sum::-webkit-details-marker { display: none; }
-    .ledger-sum:hover { color: var(--ink); }
-    .ledger-sum .left { display: inline-flex; align-items: center; gap: 8px; }
-    .ledger-sum .chev { display: inline-block; transition: transform 140ms ease-out; }
-    .master-ledger[open] .ledger-sum .chev { transform: rotate(90deg); }
-    .ledger-badge {
-      font-size: 10px;
-      font-weight: 500;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: var(--bg-raised);
-      color: var(--ink-faint);
-    }
-    .ledger-body {
-      padding: 0 20px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .sub-tabs {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 8px;
-    }
-    .sub-tab-btn {
-      appearance: none;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 4px 12px;
-      background: var(--bg-tile);
-      color: var(--ink-dim);
-      font: inherit;
-      font-size: 11.5px;
-      cursor: pointer;
-      transition: background 140ms ease-out, color 140ms ease-out, border-color 140ms ease-out;
-    }
-    .sub-tab-btn:hover { color: var(--ink); border-color: var(--line-strong); }
-    .sub-tab-btn.is-active {
-      background: var(--color-accent);
-      color: var(--color-accent-ink);
-      font-weight: 600;
-      border-color: var(--color-accent);
-    }
+    .ledger-sum .left { display: inline-flex; align-items: center; gap: 10px; }
+    .ledger-badge { color: var(--ink-faint); font-size: 11px; font-weight: 400; }
+    .ledger-body { padding-bottom: 24px; }
+    .sub-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .sub-tab-btn { appearance: none; border: 1px solid transparent; border-radius: 6px; padding: 7px 12px; background: transparent; color: var(--ink-faint); font-size: 12px; }
+    .sub-tab-btn.is-active { border-color: var(--line-strong); background: var(--bg-raised); color: var(--ink); }
     .ledger-pane { display: none; }
-    .ledger-pane.is-active { display: block; }
-    
-    /* Notes & Status */
-    .notes { padding: 12px 16px; background: var(--bg-tile); border: 1px solid var(--line); border-radius: 10px; font-size: 11px; color: var(--ink-faint); }
-    .notes h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; }
-    .notes ul { margin: 0; padding-left: 18px; }
-    .notes li.warn { color: var(--accent-dim); }
-    .status { padding: 40px 20px; text-align: center; color: var(--ink-dim); }
-    .status.bad { color: oklch(0.70 0.18 25); }
+    .ledger-pane.is-active { display: block; animation: pane-enter 140ms ease-out; }
+    @keyframes pane-enter { from { opacity: .3; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .notes { font-size: 11px; line-height: 1.8; color: var(--ink-faint); }
+    .notes ul { margin: 12px 0 0; padding-left: 18px; }
+    .notes li + li { margin-top: 8px; }
+    .notes .notice-list { list-style: none; margin: 0 0 18px; padding: 0 0 0 14px; border-left: 2px solid var(--accent-dim); color: var(--ink-dim); }
+    .notes summary { cursor: pointer; font-size: 12px; color: var(--ink-dim); }
+    .subscription-picker { padding: 32px; background: #20271f; border: 1px solid var(--line); border-radius: 12px; }
+    .subscription-picker h2 { font-size: 22px; margin: 8px 0; }
+    .subscription-picker p { color: var(--ink-dim); max-width: 600px; font-size: 13px; }
+    .subscription-options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+    .subscription-option { display: grid; gap: 7px; padding: 16px 20px; text-align: left; background: var(--bg-panel); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 8px; }
+    .subscription-option:hover { border-color: var(--color-accent); }
+    .subscription-option strong { font-weight: 550; }
+    .subscription-option span { color: var(--ink-faint); font-size: 12px; }
+    .subscription-picked { display: flex; align-items: center; gap: 16px; color: var(--ink-dim); font-size: 12px; }
+    .status { padding: 64px 28px; text-align: center; color: var(--ink-dim); }
+    .status.bad { color: var(--alarm); }
+    @media (max-width: 1100px) {
+      .cards, .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .analysis-grid > :nth-child(odd)::before { display: none; }
+      .analysis-grid > :nth-child(n + 3) { padding-top: 22px; border-top: 1px solid var(--line); }
+    }
+    @media (max-width: 900px) {
+      .sheet { --section-columns: minmax(0, 1fr); }
+      .period-detail-grid > :nth-child(2) { padding-top: 24px; border-top: 1px solid var(--line); }
+      .period-detail-grid > :nth-child(2)::before { display: none; }
+      .stack-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
+      .wordmark { font-size: 20px; }
+    }
+    @media (max-width: 640px) {
+      .scrim { padding: 8px; }
+      .panel { border-radius: 12px; }
+      .masthead { padding: 18px 18px 12px; gap: 10px; align-items: flex-start; }
+      .wordmark { font-size: 18px; letter-spacing: -.4px; }
+      .wordmark em { display: block; font-size: 13px; margin-top: 2px; }
+      .subhead { font-size: 10px; }
+      .controls { gap: 1px; }
+      .seg { padding: 2px; }
+      .seg button { padding: 5px 7px; }
+      .ghost { width: 30px; height: 32px; }
+      .analysis-heading { flex-wrap: wrap; gap: 4px; }
+      .view-tabs { gap: 20px; }
+      .view-tabs button { font-size: 12px; }
+      .view-tabs button[aria-pressed="true"]::after { bottom: 6px; }
+      .analysis-scope .view-range { width: 100%; margin: 0; font-size: 10px; }
+      .sheet { padding: 24px 18px; gap: 24px; }
+      .window-status { padding: 0 18px 16px; }
+      .window-status-heading { display: block; margin-bottom: 10px; }
+      .window-status-note { margin-top: 4px; }
+      .window-status-grid { gap: 16px; }
+      .window-status-card + .window-status-card::before { left: -8px; }
+      .window-status-value { display: block; }
+      .window-percent { font-size: 20px; margin-top: 4px; }
+      .window-status-card .readout { font-size: 10px; }
+      .analysis-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+      .analysis-grid > * { display: block; grid-row: auto; }
+      .analysis-grid > * + * { padding-top: 22px; border-top: 1px solid var(--line); }
+      .analysis-grid > * + *::before { display: none; }
+      .analysis-grid h2 { margin-bottom: 16px; }
+      .amount { font-size: 42px; }
+      .amount.small { font-size: 27px; }
+      .gauge-head { gap: 16px; }
+      .gauge-head .right { text-align: left; }
+      .gauge-head .right .eyebrow:last-child { max-width: 180px; }
+      .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
+      .summary-card.primary { grid-column: 1 / -1; }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
+      .cell .v { font-size: 23px; }
+
+      .stack-keys { grid-template-columns: minmax(0, 1fr); }
+      .mem-foot { flex-wrap: wrap; gap: 10px; }
+      .ledger-badge { font-size: 10px; }
+      .subscription-picker { padding: 22px; }
+      .subscription-picker h2 { font-size: 19px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
   `;
   function percentNumber(value) {
     if (!Number.isFinite(Number(value))) return "—";
@@ -2623,14 +2495,19 @@
 
     return `
       <div class="window-status" aria-label="${esc(L.windowStatusTitle)}">
-        <h2>${esc(L.windowStatusTitle)}</h2>
-        <div class="window-status-note">${esc(L.windowStatusHint(!!short, !!weekly))}</div>
+        <div class="window-status-heading">
+          <h2>${esc(L.windowStatusTitle)}</h2>
+          <div class="window-status-note">${esc(L.windowStatusHint(!!short, !!weekly))}</div>
+        </div>
         <div class="window-status-grid">
           ${rows
             .map(
               (row) => `<div class="window-status-card ${esc(row.kind)}" data-window-kind="${esc(row.kind)}">
-                <div class="eyebrow">${esc(row.label)}</div>
-                <div class="window-percent">${esc(L.remainingPercent(row.remaining))}</div>
+                <div class="window-status-value">
+                  <div class="eyebrow">${esc(row.label)}</div>
+                  <div class="window-percent">${esc(L.remainingPercent(row.remaining))}</div>
+                </div>
+                ${row.window.hasUsedPercent ? `<div class="window-meter" aria-hidden="true" style="--remaining:${row.remaining}"><i></i></div>` : ""}
                 <div class="readout">
                   <span>${esc(L.usedPercent(row.used))}</span>
                   <span>${esc(L.resetAtLabel(clock(row.window.resetAt)))}</span>
@@ -2665,50 +2542,9 @@
      */
     const remaining = r.ceiling ? Math.max(0, r.ceiling - r.s.credits) : null;
     const overspent = r.ceiling ? r.s.credits > r.ceiling : false;
+    const boundaryDay = !win.placeholder && win.startAt % DAY_MS !== 0 && r.days.find((d) => d.date === dayKey(win.startAt));
 
-    return `
-      ${windowStatusHtml()}
-      <div class="gauge-head">
-        <div>
-          <div class="eyebrow">${esc(L.measured)} · ${esc(L.spent)}</div>
-          <div class="amount">${usd(r.s.credits)}</div>
-        </div>
-        ${
-          /* The allowance stopped being a guess the moment it could be read off the daily
-             percentages, and the panel must not keep calling it one. Solid where measured,
-             dashed amber only where it is still divided out of the window percentage. */
-          r.ceiling
-            ? `<div class="right">
-                 <div class="eyebrow ${allowanceMeasured ? "" : "is-inferred"}">${esc(allowanceMeasured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
-                 <div class="amount small ${allowanceMeasured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
-                 ${
-                   source === "daily-ratio"
-                     ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.allowance.samples))}</div>`
-                     : source === "depletion"
-                       ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredAtDepletion)}</div>`
-                       : ""
-                 }
-               </div>`
-            : ""
-        }
-      </div>
-
-      <div class="gauge">
-        <div class="track ${r.ceiling ? "" : "blank"}" role="img"
-             aria-label="${esc(
-               r.ceiling
-                 ? L.gaugeAria(usd(r.s.credits), usd(r.ceiling), allowanceMeasured)
-                 : L.noCeiling(Math.round(r.used)),
-             )}">
-          <div class="fill ${ratio > 0.8 ? "hot" : ""}" style="--fill:${r.ceiling ? ratio.toFixed(3) : 0}"></div>
-        </div>
-        <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span></div>
-        <div class="legend-key">
-          <span><i class="key-solid"></i>${esc(L.measured)}</span>
-          <span><i class="key-dash"></i>${esc(L.inferred)}</span>
-        </div>
-      </div>
-
+    const warnings = `
       ${
         /* A block on a shorter window is not a block on this one. Say so on its own line so
            the current weekly reading still gets to speak for the window it measures. */
@@ -2759,6 +2595,40 @@
           ? `<p class="verdict">${esc(windowCopy("overspent")(allowancesUsed(dayKey(win.startAt), dayKey(now)).toFixed(1)))}</p>`
           : ""
       }
+      ${boundaryDay ? `<p class="verdict window-boundary-note">${esc(windowCopy("n4")(clock(win.startAt), boundaryDay.date, usd(boundaryDay.credits)))}</p>` : ""}
+    `;
+    return {
+      warnings: warnings.trim() ? `<div class="current-window">${warnings}</div>` : "",
+      details: `
+      <details class="detail-disclosure current-window-details" data-detail="current-window">
+        <summary>${esc(L.currentWindowDetails)}</summary>
+        <div class="disclosure-body"><div class="balance">
+      <div class="gauge-head">
+        <div>
+          <div class="eyebrow">${esc(L.measured)} · ${esc(L.spent)}</div>
+          <div class="amount">${usd(r.s.credits)}</div>
+          <div class="hint">${int(r.s.credits)} credits</div>
+        </div>
+        ${
+          /* The allowance stopped being a guess the moment it could be read off the daily
+             percentages, and the panel must not keep calling it one. Solid where measured,
+             dashed amber only where it is still divided out of the window percentage. */
+          r.ceiling
+            ? `<div class="right">
+                 <div class="eyebrow ${allowanceMeasured ? "" : "is-inferred"}">${esc(allowanceMeasured ? L.measured : L.inferred)} · ${esc(L.ceiling)}</div>
+                 <div class="amount small ${allowanceMeasured ? "" : "is-inferred"}">${usd(r.ceiling)}</div>
+                 ${
+                   source === "daily-ratio"
+                     ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredFrom(r.allowance.samples))}</div>`
+                     : source === "depletion"
+                       ? `<div class="eyebrow" style="margin:5px 0 0">${esc(L.measuredAtDepletion)}</div>`
+                       : ""
+                 }
+               </div>`
+            : ""
+        }
+      </div>
+
       <div class="readout">
         ${r.ceiling ? `<span><b class="inf">${usd(remaining)}</b> ${esc(L.leftSuffix(pct(1 - ratio)))}</span>` : ""}
         ${!r.ceiling && win.inferable && enoughElapsed ? `<span>${esc(L.noCeiling(Math.round(r.used)))}</span>` : ""}
@@ -2777,7 +2647,10 @@
               : ""
         }
       </div>
-    `;
+        </div></div>
+      </details>
+    `,
+    };
   }
 
   // Says which window openings the remaining allowance is actually made of.
@@ -2805,7 +2678,6 @@
     const L = t();
     if (!state.win || !hasRenewalDate()) return "";
 
-    const proj = projectToRenewal();
     const cost = monthlyCost();
     const p = periodRange();
     const periodSpend = summarize(state.days.filter((d) => d.date >= p.from)).credits;
@@ -2831,29 +2703,7 @@
         : `<div class="readout" style="margin:2px 0 6px"><span>${esc(L.setCost)}</span></div>
            ${costField(0)}`;
 
-    let forecastBlock = "";
-    if (proj) {
-      const allowance =
-        proj.ceiling == null
-          ? `<div class="amount small" style="color:var(--ink-3)">—</div>
-             <div class="readout"><span>${esc(L.renewalUnknown)}</span></div>`
-          : `<div class="amount small is-inferred">${usd(proj.allowance)}</div>
-             <div class="readout"><span>${esc(L.renewalOn(dateOnly(proj.renewsAt)))}</span></div>
-             <div class="readout"><span>${esc(breakdownLine(proj))}</span></div>`;
-
-      forecastBlock = `
-      <div class="forecast">
-        <div style="flex:2 1 320px"><div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.untilRenewal)}</div>${allowance}</div>
-        <div><div class="eyebrow">${esc(L.payback)}</div>${payback}</div>
-      </div>`;
-    } else {
-      forecastBlock = `
-      <div class="forecast">
-        <div><div class="eyebrow">${esc(L.payback)}</div>${payback}</div>
-      </div>`;
-    }
-
-    return `${forecastBlock}${cycleStripHtml(proj)}`;
+    return `<div class="summary-card payback"><div class="eyebrow">${esc(L.payback)}</div>${payback}</div>`;
   }
 
   function cycleStripHtml(proj) {
@@ -2934,7 +2784,7 @@
       : "";
 
     return `
-      <div style="margin-top:20px">
+      <div class="section history">
         <h2>${esc(windowCopy("cycles"))}<em>${esc(windowCopy("cyclesSub"))}</em></h2>
         <div class="scroll" tabindex="0" role="region" aria-label="${esc(windowCopy("cycles"))}"><table>
           <thead><tr><th>${esc(L.thWhen)}</th><th></th><th class="n">${esc(L.thSpend)}</th></tr></thead>
@@ -3088,21 +2938,16 @@
     return { leftWindow, natural, cards, bank, credits, total, proj, reading: r, ceiling: effectiveCeiling };
   }
 
-  function periodSummaryCardsHtml(spendCredits, allowance, leftTotal) {
+  function periodSummaryCardsHtml(spendCredits, leftTotal) {
     const L = t();
-    const ceiling = allowance?.credits;
-    const measured = allowance?.source === "daily-ratio";
     return `
       <div class="summary-cards">
         <div class="summary-card primary">
-          <div class="eyebrow">${esc(L.measured)} · ${esc(L.periodCardSpent)}</div>
+          <div class="eyebrow">${esc(L.measured)} · ${esc(L.periodMeasuredValue)}</div>
           <div class="amount">${usd(spendCredits)}</div>
+          <div class="hint">${int(spendCredits)} credits</div>
         </div>
-        <div class="summary-card">
-          <div class="eyebrow ${measured ? "" : "is-inferred"}">${esc(measured ? L.measured : L.inferred)} · ${esc(windowCopy("periodCardOne") )}</div>
-          <div class="amount small ${measured ? "" : "is-inferred"}">${ceiling ? usd(ceiling) : "—"}</div>
-          <div class="hint">${esc(windowCopy("periodCardOneSub"))}</div>
-        </div>
+        ${forecastHtml()}
         <div class="summary-card infer">
           <div class="eyebrow is-inferred">${esc(L.inferred)} · ${esc(L.periodCardLeft)}</div>
           <div class="amount small is-inferred">${leftTotal > 0 ? usd(leftTotal) : "—"}</div>
@@ -3351,6 +3196,7 @@
         <div class="section-head">
           <h2>${esc(L.chartComposite)}<em>${esc(L.chartCompositeSub)}</em></h2>
         </div>
+        <div class="chart-viewport" tabindex="0" role="region" aria-label="${esc(L.chartComposite)}">
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartComposite)}">
           ${gridYs}
           <line x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule)" />
@@ -3367,6 +3213,7 @@
           <text x="${left}" y="${height - 12}">${esc(shortDate(dayKey(t0)))}</text>
           <text x="${width - right}" y="${height - 12}" text-anchor="end">${esc(shortDate(dayKey(t1)))}</text>
         </svg>
+        </div>
         <div class="legend-key">
           <span><i class="key-solid soft"></i>${esc(L.chartBarPast)}</span>
           <span><i class="key-solid"></i>${esc(L.chartBarNow)}</span>
@@ -3383,17 +3230,17 @@
     for (let key = from; key <= to; key = addDays(key, 1)) keys.push(key);
     const byDate = new Map(days.map((d) => [d.date, d.credits]));
     const values = keys.map((key) => byDate.get(key) || 0);
-    const width = 640;
-    const height = 138;
-    const left = 36;
-    const right = 12;
+    const width = 250;
+    const height = 150;
+    const left = 0;
+    const right = 1;
     const top = 14;
     const bottom = 25;
     const plotWidth = width - left - right;
     const plotHeight = height - top - bottom;
     const max = Math.max(...values, rate?.rate || 0, 1);
     const slot = plotWidth / Math.max(1, keys.length);
-    const barWidth = Math.max(0, slot - 2);
+    const barWidth = Math.min(24, Math.max(0.5, slot - 2));
     const y = (value) => top + plotHeight - (value / max) * plotHeight;
     const today = dayKey(Date.now());
     /*
@@ -3409,7 +3256,7 @@
         const title = unreported
           ? `${key} — ${L.todayMissing}`
           : `${key} ${usd(value)}${key === today ? ` — ${L.partialDay}` : ""}`;
-        return `<rect x="${left + i * slot + 1}" y="${y(value)}" width="${barWidth}" height="${barHeight}" rx="0" fill="var(--measured)"${key === today ? ' opacity=".45"' : ""}><title>${esc(title)}</title></rect>`;
+        return `<rect x="${left + i * slot + (slot - barWidth) / 2}" y="${y(value)}" width="${barWidth}" height="${barHeight}" rx="0" fill="var(--measured)"${key === today ? ' opacity=".45"' : ""}><title>${esc(title)}</title></rect>`;
       })
       .join("");
     const reference = rate
@@ -3420,6 +3267,7 @@
     return `
       <div class="chart">
         <h2>${esc(L.chartDaily)}${rate ? `<em>${esc(L.chartDailySub(usd(rate.rate)))}</em>` : ""}</h2>
+        <div class="chart-viewport" tabindex="0" role="region" aria-label="${esc(L.chartDaily)}">
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartDaily)}">
           <line class="axis" x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}"><title>Axis</title></line>
           ${reference}
@@ -3427,6 +3275,7 @@
           <text x="${left}" y="${height - 5}">${esc(shortDate(keys[0]))}</text>
           <text x="${width - right}" y="${height - 5}" text-anchor="end">${esc(shortDate(keys[keys.length - 1]))}</text>
         </svg>
+        </div>
       </div>
     `;
   }
@@ -3434,61 +3283,51 @@
   function modelChartHtml(s) {
     const L = t();
     const rows = [...s.models.values()].filter((m) => m.credits > 0).sort((a, b) => b.credits - a.credits);
-    const width = 640;
-    const height = Math.max(72, rows.length * 30 + 18);
-    const labelWidth = 172;
-    const barWidth = 255;
     const max = rows[0]?.credits || 1;
-    const marks = rows
-      .map((m, i) => {
-        const y = 18 + i * 30;
-        const w = (m.credits / max) * barWidth;
-        const perTurn = m.turns ? usd(m.credits / m.turns) : "—";
-        const name = modelName(m.name);
-        return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
-          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="0" fill="var(--measured)"><title>${esc(`${name} · ${usd(m.credits)} · ${perTurn}/turn`)}</title></rect>
-          <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(m.credits))}</text>
-          <text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>`;
-      })
-      .join("");
-
     return `
       <div class="chart">
         <h2>${esc(L.chartModel)}</h2>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartModel)}">${marks}</svg>
-      </div>
-    `;
+        <div class="rank-list">${rows.map((m) => {
+          const name = modelName(m.name);
+          const perTurn = m.turns ? usd(m.credits / m.turns) : "—";
+          const tip = `${name} · ${usd(m.credits)} · ${perTurn}/turn`;
+          return `<div class="rank-row">
+            <div class="rank-label"><span>${esc(name)}</span><strong>${esc(usd(m.credits))}</strong></div>
+            <svg viewBox="0 0 100 5" preserveAspectRatio="none" role="img" aria-label="${esc(tip)}">
+              <title>${esc(tip)}</title>
+              <rect width="100" height="5" fill="var(--bg-track)" />
+              <rect width="${(m.credits / max * 100).toFixed(2)}" height="5" fill="var(--measured)" />
+            </svg>
+            <div class="rank-meta"><span>${esc(L.subShare(pct(m.credits / (s.credits || 1))))}</span><span>${esc(perTurn)}/turn</span></div>
+          </div>`;
+        }).join("")}</div>
+      </div>`;
   }
 
   function surfaceChartHtml(s) {
     const L = t();
     const rows = [...s.surfaces.values()].filter((row) => row.credits > 0).sort((a, b) => b.credits - a.credits);
     if (!rows.length) return "";
-    const width = 640;
-    const height = Math.max(72, rows.length * 30 + 18);
-    const labelWidth = 172;
-    const barWidth = 255;
-    const max = rows[0].credits || 1;
+    const max = rows[0].credits;
     const byTurns = s.surfaceByTurns && !s.surfaceByPercent;
-    const marks = rows
-      .map((row, i) => {
-        const y = 18 + i * 30;
-        const w = (row.credits / max) * barWidth;
-        const name = surfaceName(row.name);
-        const perTurn = row.turns ? usd(row.credits / row.turns) : "";
-        return `<text class="label-strong" x="0" y="${y + 12}">${esc(name)}</text>
-          <rect x="${labelWidth}" y="${y}" width="${w}" height="18" rx="0" fill="var(--measured)"><title>${esc(`${name} · ${usd(row.credits)}`)}</title></rect>
-          <text class="label-strong" x="${labelWidth + w + 7}" y="${y + 12}">${esc(usd(row.credits))}</text>
-          ${perTurn ? `<text class="muted" x="${labelWidth + w + 7}" y="${y + 23}">${esc(`${perTurn}/turn`)}</text>` : ""}`;
-      })
-      .join("");
-
     return `
       <div class="chart">
         <h2>${esc(L.chartSurface)}<em>${esc(byTurns ? L.chartSurfaceSubTurns : L.chartSurfaceSub)}</em></h2>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(L.chartSurface)}">${marks}</svg>
-      </div>
-    `;
+        <div class="rank-list">${rows.map((row) => {
+          const name = surfaceName(row.name);
+          const tip = `${name} · ${usd(row.credits)}`;
+          const perTurn = row.turns ? `${usd(row.credits / row.turns)}/turn` : "";
+          return `<div class="rank-row">
+            <div class="rank-label"><span>${esc(name)}</span><strong>${esc(usd(row.credits))}</strong></div>
+            <svg viewBox="0 0 100 5" preserveAspectRatio="none" role="img" aria-label="${esc(tip)}">
+              <title>${esc(tip)}</title>
+              <rect width="100" height="5" fill="var(--bg-track)" />
+              <rect width="${(row.credits / max * 100).toFixed(2)}" height="5" fill="var(--measured-soft)" />
+            </svg>
+            <div class="rank-meta"><span>${esc(L.subShare(pct(row.credits / (s.credits || 1))))}</span><span>${esc(perTurn)}</span></div>
+          </div>`;
+        }).join("")}</div>
+      </div>`;
   }
 
   function periodHeadHtml(s) {
@@ -3527,30 +3366,37 @@
       cards.n > 0 ? L.resetCardsUsed(cards.n, usd(cards.credits)) : null,
     ].filter(Boolean);
 
-    return `
-      ${windowStatusHtml()}
-      <div class="section">${periodSummaryCardsHtml(s.credits, reading?.allowance, leftTotal)}</div>
+    return {
+      summary: `
+      <section class="subscription-summary" aria-label="${esc(L.period)}">
+        <h2>${esc(L.period)}<em>${esc(L.periodSpan(p.from, p.to))} · UTC</em></h2>
+        ${periodSummaryCardsHtml(s.credits, leftTotal)}
+      </section>
+      `,
+      details: `
+      <details class="detail-disclosure forecast-details" data-detail="forecast">
+      <summary>${esc(L.forecastDetails)}</summary>
+      <div class="disclosure-body">
       ${subscriptionFormulaHtml(s.credits, parts, grant)}
-      ${remainingStackHtml(parts)}
+      ${parts.proj?.ceiling != null ? `<p class="section-note">${esc(breakdownLine(parts.proj))}</p>` : ""}
+      <div class="period-detail-grid">
       ${
         spentRowsHaveData(winInfo) || projection
           ? periodCompositeChartHtml(winInfo, projection)
           : `<div class="section readout"><span>${esc(state.win?.placeholder ? L.projNoWindow : L.projNotYet)}</span></div>`
       }
+      ${remainingStackHtml(parts)}
+      </div>
       ${
         footnotes.length
-          ? `<div class="section"><div class="readout">${footnotes.map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>`
+          ? `<div class="period-footnotes">${footnotes.map((t) => `<span>${esc(t)}</span>`).join("")}</div>`
           : ""
       }
       ${periodWindowTableHtml(winInfo)}
-      <div class="readout meta">
-        <span>${esc(L.periodSpan(shortDate(p.from), shortDate(p.to)))}</span>
-        <span>${esc(L.activeDays)} <b>${esc(s.days)}</b></span>
-        <span>${esc(L.dailyAvg)} <b>${usd(s.days ? s.credits / s.days : 0)}</b></span>
-        <span>${esc(L.turnsTotal(int(s.turns)))}</span>
-      </div>
       <div class="why">${esc(L.periodWhy)}</div>
-    `;
+      </div>
+      </details>      `,
+    };
   }
 
   function spentRowsHaveData(winInfo) {
@@ -3568,6 +3414,7 @@
 
     return `
       <h2>${esc(L.whereItWent)}<em>${esc(L.whereSub)}</em></h2>
+      <div class="token-body">
       <div class="bars">
         ${parts.map(([, v, , colour]) => `<div style="flex:${v / total};background:${colour}"></div>`).join("")}
       </div>
@@ -3575,9 +3422,10 @@
         ${parts
           .map(
             ([name, v, tk, colour]) =>
-              `<span><i class="swatch" style="background:${colour}"></i>${esc(name)} <b>${usd(v)}</b> · ${pct(v / total)} · ${tokenCount(tk)}</span>`,
+              `<span><i class="swatch" style="background:${colour}"></i><span>${esc(name)}</span><b>${usd(v)}</b><span class="key-detail">${pct(v / total)} · ${tokenCount(tk)} tokens</span></span>`,
           )
           .join("")}
+      </div>
       </div>
     `;
   }
@@ -3602,7 +3450,7 @@
             const hasModels = d.models.length > 0;
             return `<tr>
               <td>
-                ${hasModels ? `<button type="button" class="row-toggle" data-day-drill="${dayId}"><span class="rchev">▸</span> ${esc(d.date)}</button>` : esc(d.date)}
+                ${hasModels ? `<button type="button" class="row-toggle" data-day-drill="${dayId}" aria-expanded="false" aria-controls="sub-${dayId}"><span class="rchev">▸</span> ${esc(d.date)}</button>` : esc(d.date)}
               </td>
               <td class="n strong">${usd(d.credits)}</td>
               <td class="n">${int(d.credits)}</td>
@@ -3660,16 +3508,16 @@
           <span class="ledger-badge">${esc(L.ledgerBadge)}</span>
         </summary>
         <div class="ledger-body">
-          <div class="sub-tabs" role="tablist">
-            <button type="button" class="sub-tab-btn is-active" data-subtab="daily">${esc(L.subTabDaily)}</button>
-            <button type="button" class="sub-tab-btn" data-subtab="model">${esc(L.subTabModels)}</button>
+          <div class="sub-tabs" role="group" aria-label="${esc(L.seeNumbers)}">
+            <button type="button" class="sub-tab-btn is-active" data-subtab="daily" aria-pressed="true" aria-controls="ledger-daily">${esc(L.subTabDaily)}</button>
+            <button type="button" class="sub-tab-btn" data-subtab="model" aria-pressed="false" aria-controls="ledger-model">${esc(L.subTabModels)}</button>
           </div>
 
-          <div class="ledger-pane is-active" data-pane="daily">
+          <div class="ledger-pane is-active" id="ledger-daily" data-pane="daily">
             ${dayTableHtml(days)}
           </div>
 
-          <div class="ledger-pane" data-pane="model">
+          <div class="ledger-pane" id="ledger-model" data-pane="model">
             ${modelTableHtml(s)}
           </div>
 
@@ -3683,10 +3531,6 @@
     const win = state.win;
     const reading = cycleReading();
     const allowance = reading?.allowance;
-    const first = days[0];
-    // Any opening that is not exactly midnight UTC shares its day with the window before it.
-    const opensMidDay = win && win.startAt % DAY_MS !== 0;
-    const overlap = state.view === "cycle" && opensMidDay && first && first.date === dayKey(win.startAt);
 
     const items = [
       [L.n1(RATE_CARD_VERIFIED), false],
@@ -3711,7 +3555,6 @@
             ? [[L.n11, true]]
             : [[windowCopy("n3"), false]]),
       // A conflict between the two allowance sources is shown next to the headline, not here.
-      ...(overlap ? [[windowCopy("n4")(clock(win.startAt), first.date, usd(first.credits)), true]] : []),
       ...(days.some((d) => d.models.some((m) => m.speed && m.speed !== "standard"))
         ? [[L.nTurnSplit, false]]
         : []),
@@ -3729,8 +3572,11 @@
 
     return `
       <div class="notes">
-        <h3>${esc(L.notesTitle)}</h3>
-        <ul>${items.map(([text, warn]) => `<li class="${warn ? "warn" : ""}">${esc(text)}</li>`).join("")}</ul>
+        ${items.some(([, warn]) => warn) ? `<ul class="notice-list">${items.filter(([, warn]) => warn).map(([text]) => `<li class="warn">${esc(text)}</li>`).join("")}</ul>` : ""}
+        <details>
+          <summary>${esc(L.notesTitle)}</summary>
+          <ul>${items.filter(([, warn]) => !warn).map(([text]) => `<li>${esc(text)}</li>`).join("")}</ul>
+        </details>
       </div>
     `;
   }
@@ -3749,10 +3595,9 @@
   function triggerHtml() {
     const L = t();
     return `
-      <button class="trigger ${state.loading ? "busy" : ""}" title="${esc(`${L.openPanel} · v${scriptVersion()}`)}">
+      <button class="trigger ${state.loading ? "busy" : ""}" aria-expanded="${state.open}" aria-haspopup="dialog" title="${esc(`${L.openPanel} · v${scriptVersion()}`)}">
         <span class="trigger-ps">$</span>
         <span class="trigger-name">${state.loading ? esc(L.loading) : esc(L.brand)}</span>
-        <span class="cursor"></span>
       </button>
     `;
   }
@@ -3803,53 +3648,124 @@
 
 
 
+  function analysisHtml() {
+    const L = t();
+    const { days, s, from, to } = currentSlice() || { days: state.days };
+    return `
+      <section class="analysis-section" aria-label="${esc(L.analysis)}" data-scope="${esc(state.view || "unavailable")}">
+        <div class="analysis-heading">
+          <h2>${esc(L.analysis)}</h2>
+          <div class="view-tabs" role="group" aria-label="${esc(L.analysis)}">
+            <button data-view="cycle" aria-pressed="${state.view === "cycle"}" aria-controls="analysis-content" ${hasCurrentWindow() ? "" : "disabled"}>${esc(L.currentWindow)}</button>
+            <button data-view="period" aria-pressed="${state.view === "period"}" aria-controls="analysis-content" ${hasRenewalDate() ? "" : "disabled"}>${esc(L.period)}</button>
+          </div>
+        </div>
+        <div id="analysis-content">
+          ${s ? `
+          <div class="analysis-scope">
+            <span class="eyebrow">${esc(state.view === "cycle" ? L.currentWindow : L.period)} · ${esc(L.analysisSpent)}</span>
+            <strong class="analysis-subtotal">${usd(s.credits)}</strong>
+            <span class="view-range">${esc(from)} — ${esc(to)} · UTC</span>
+          </div>
+          ${days.length ? `
+          <div class="cards">${statCards(days, s)
+            .map((c) => `<div class="cell"><div class="k">${esc(c.label)}</div><div class="v">${esc(c.value)}</div><div class="s">${esc(c.sub)}</div></div>`)
+            .join("")}</div>
+          <div class="analysis-grid">
+            ${dailyChartHtml(days, from, to)}
+            <div class="token-breakdown">${splitHtml(s)}</div>
+            ${modelChartHtml(s)}
+            ${surfaceChartHtml(s)}
+          </div>
+          ${masterLedgerHtml(days, s)}` : `<div class="status">${esc(state.view === "cycle" ? windowCopy("emptyCycle") : L.emptyPeriod)}<div class="hint">${esc(L.emptyHint)}</div></div>`}
+          ` : `<div class="status">${esc(L.analysisUnavailable)}</div>`}
+          ${notesHtml(days)}
+        </div>
+      </section>`;
+  }
+
   function sheetHtml() {
     const L = t();
-
     if (state.loading) return `<div class="status">${esc(L.loading)}</div>`;
     if (state.error) return `<div class="status bad">${esc(state.error)}</div>`;
+    if (!hasRenewalDate()) state.view = hasCurrentWindow() ? "cycle" : "";
+    else if (state.view !== "cycle" || !hasCurrentWindow()) state.view = "period";
 
-    if (state.view === "period" && !hasRenewalDate()) {
-      return `<div class="sheet">${state.ent?.ambiguous ? subscriptionChoiceHtml() : renewalUnavailableHtml()}</div>`;
-    }
-
-    const { days, s, from, to } = currentSlice();
-    const subscriptionControl = state.ent?.ambiguous
-      ? subscriptionChoiceHtml()
-      : state.view === "period"
-        ? selectedSubscriptionHtml()
-        : "";
-    if (!days.length) {
-      return `<div class="sheet">${subscriptionControl}<div class="status">${esc(state.view === "cycle" ? windowCopy("emptyCycle") : L.emptyPeriod)}
-        <div class="hint">${esc(L.emptyHint)}</div></div></div>`;
-    }
-
-    const forecast = state.view === "cycle" ? forecastHtml() : "";
-
+    const p = periodRange();
+    const period = hasRenewalDate()
+      ? periodHeadHtml(summarize(state.days.filter((d) => d.date >= p.from && d.date <= dayKey(Date.now()))))
+      : null;
+    const currentWindow = state.win ? gaugeHtml() : null;
+    const history = cycleStripHtml(projectToRenewal());
     return `
       <div class="sheet">
-        ${subscriptionControl}
-        ${state.view === "cycle" ? gaugeHtml() : periodHeadHtml(s)}
-        ${forecast ? `<div class="rule"></div>${forecast}` : ""}
-        <div class="rule major"></div>
-        <div class="cards">${statCards(days, s)
-          .map(
-            (c) =>
-              `<div class="cell"><div class="k">${esc(c.label)}</div><div class="v">${esc(c.value)}</div><div class="s">${esc(c.sub)}</div></div>`,
-          )
-          .join("")}</div>
-        <div class="rule"></div>
-        ${splitHtml(s)}
-        <div class="rule major"></div>
-        ${dailyChartHtml(days, from, to)}
-        <div class="rule"></div>
-        ${modelChartHtml(s)}
-        ${surfaceChartHtml(s)}
-        ${notesHtml(days)}
-        ${masterLedgerHtml(days, s)}
-      </div>
-    `;
+        ${hasRenewalDate() ? selectedSubscriptionHtml() : ""}
+        ${period ? period.summary : state.ent?.ambiguous ? subscriptionChoiceHtml() : renewalUnavailableHtml()}
+        ${currentWindow?.warnings || ""}
+        ${analysisHtml()}
+        ${period?.details || ""}
+        ${hasCurrentWindow() ? currentWindow?.details || "" : ""}
+        ${history ? `<details class="detail-disclosure window-history" data-detail="history"><summary>${esc(windowCopy("cycles"))}</summary><div class="disclosure-body">${history}</div></details>` : ""}
+      </div>`;
   }
+  function bindAnalysisControls(container) {
+    container.querySelectorAll("[data-view]").forEach((button) => {
+      button.onclick = () => {
+        if (button.disabled || button.dataset.view === state.view) return;
+        const section = state.root.querySelector(".analysis-section");
+        const sheet = state.root.querySelector(".sheet");
+        const scrollTop = sheet.scrollTop;
+        const openDetails = [".master-ledger", ".notes details"].filter((selector) => section.querySelector(selector)?.open);
+        const subtab = section.querySelector('[data-subtab][aria-pressed="true"]')?.dataset.subtab;
+        state.view = button.dataset.view;
+        section.outerHTML = analysisHtml();
+        const updated = state.root.querySelector(".analysis-section");
+        for (const selector of openDetails) updated.querySelector(selector)?.setAttribute("open", "");
+        bindAnalysisControls(updated);
+        if (subtab) updated.querySelector(`[data-subtab="${subtab}"]`)?.click();
+        updated.querySelector(`[data-view="${state.view}"]`)?.focus({ preventScroll: true });
+        sheet.scrollTop = scrollTop;
+      };
+    });
+
+    container.querySelectorAll("[data-day-drill]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.dataset.dayDrill;
+        const sub = container.querySelector("#sub-" + id);
+        if (sub) {
+          const open = sub.classList.toggle("is-open");
+          btn.classList.toggle("is-open", open);
+          btn.setAttribute("aria-expanded", String(open));
+        }
+      };
+    });
+
+    container.querySelectorAll("[data-subtab]").forEach((btn) => {
+      btn.onclick = () => {
+        const target = btn.dataset.subtab;
+        container.querySelectorAll(".sub-tab-btn").forEach((b) => {
+          b.classList.toggle("is-active", b.dataset.subtab === target);
+          b.setAttribute("aria-pressed", String(b.dataset.subtab === target));
+        });
+        container.querySelectorAll(".ledger-pane").forEach((p) => {
+          p.classList.toggle("is-active", p.dataset.pane === target);
+        });
+      };
+    });
+  }
+
+  function bindCostControl(root) {
+    const cost = root.querySelector(".cost-input");
+    if (!cost) return;
+    cost.onchange = () => {
+      setMonthlyCost(cost.value);
+      const refocus = root.activeElement === cost;
+      root.querySelector(".payback").outerHTML = forecastHtml();
+      bindCostControl(root);
+      if (refocus) root.querySelector(".cost-input")?.focus({ preventScroll: true });
+    };
+  }
+
   function focusedControlSelector(element) {
     if (!element) return "";
     if (element.classList?.contains("panel")) return ".panel";
@@ -3872,6 +3788,8 @@
     const L = t();
     const refocus = state.open ? focusedControlSelector(root.activeElement) : "";
     const opening = state.open && !wasOpen;
+    const scrollTop = root.querySelector(".sheet")?.scrollTop || 0;
+    const openDetails = [...root.querySelectorAll("details[data-detail][open]")].map((el) => el.dataset.detail);
 
     root.innerHTML = `
       <style>${CSS}</style>
@@ -3879,19 +3797,14 @@
       ${
         state.open
           ? `<div class="scrim">
-              <div class="panel" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(L.title)}">
+              <div class="panel ${opening ? "is-opening" : ""}" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(L.title)}">
                 <div class="masthead">
-                  <div>
-                    <div class="wordmark">${esc(L.title)} <em>${esc(L.from)}</em><span class="cursor"></span></div>
+                  <div class="identity">
+                    <h1 class="wordmark">${esc(L.title)} <em>${esc(L.from)}</em></h1>
                     <div class="subhead">${state.win ? `${esc(windowLabel())} · ` : ""}<span class="version">v${esc(scriptVersion())}</span></div>
                   </div>
-                  <span class="grow"></span>
                   <div class="controls">
-                    <div class="seg">
-                      <button data-view="cycle" aria-pressed="${state.view === "cycle"}">${esc(windowCopy("cycle"))}</button>
-                      <button data-view="period" aria-pressed="${state.view === "period"}">${esc(L.period)}</button>
-                    </div>
-                    <div class="seg">
+                    <div class="seg" role="group" aria-label="Language / 语言">
                       <button data-lang="zh" aria-pressed="${lang === "zh"}">中</button>
                       <button data-lang="en" aria-pressed="${lang === "en"}">EN</button>
                     </div>
@@ -3899,6 +3812,7 @@
                     <button class="ghost" data-act="close" title="${esc(L.close)}" aria-label="${esc(L.close)}">✕</button>
                   </div>
                 </div>
+                ${!state.loading && !state.error ? windowStatusHtml() : ""}
                 ${sheetHtml()}
               </div>
             </div>`
@@ -3923,15 +3837,15 @@
     if (state.restoreTriggerFocus) root.querySelector(".trigger")?.focus();
     else if (refocus) root.querySelector(refocus)?.focus();
     else if (panel && opening) panel.focus();
+    for (const key of openDetails) root.querySelector(`details[data-detail="${key}"]`)?.setAttribute("open", "");
+    if (!opening) {
+      const sheet = root.querySelector(".sheet");
+      if (sheet) sheet.scrollTop = scrollTop;
+    }
     state.restoreTriggerFocus = false;
     wasOpen = state.open;
 
-    root.querySelectorAll("[data-view]").forEach((b) => {
-      b.onclick = () => {
-        state.view = b.dataset.view;
-        render();
-      };
-    });
+    bindAnalysisControls(root);
 
     root.querySelectorAll("[data-lang]").forEach((b) => {
       b.onclick = () => {
@@ -3948,12 +3862,7 @@
       };
     });
 
-    const cost = root.querySelector(".cost-input");
-    if (cost)
-      cost.onchange = () => {
-        setMonthlyCost(cost.value);
-        render();
-      };
+    bindCostControl(root);
 
     const clearMem = root.querySelector('[data-act="clear-mem"]');
     if (clearMem)
@@ -3980,30 +3889,6 @@
 
     const close = root.querySelector('[data-act="close"]');
     if (close) close.onclick = closePanel;
-
-
-    root.querySelectorAll("[data-day-drill]").forEach((btn) => {
-      btn.onclick = () => {
-        const id = btn.dataset.dayDrill;
-        const sub = root.querySelector("#sub-" + id);
-        if (sub) {
-          const open = sub.classList.toggle("is-open");
-          btn.classList.toggle("is-open", open);
-        }
-      };
-    });
-
-    root.querySelectorAll("[data-subtab]").forEach((btn) => {
-      btn.onclick = () => {
-        const target = btn.dataset.subtab;
-        root.querySelectorAll(".sub-tab-btn").forEach((b) => {
-          b.classList.toggle("is-active", b.dataset.subtab === target);
-        });
-        root.querySelectorAll(".ledger-pane").forEach((p) => {
-          p.classList.toggle("is-active", p.dataset.pane === target);
-        });
-      };
-    });
 
     const reload = root.querySelector('[data-act="reload"]');
     if (reload)
@@ -4130,9 +4015,8 @@
       state.loaded = true;
       syncCycleMemory();
 
-      // A freshly reset cycle is empty — land on the period rather than an empty panel.
-      const cycleFrom = dayKey(state.win.startAt);
-      if (state.view === "cycle" && !data.days.some((d) => d.date >= cycleFrom)) state.view = "period";
+      // Billing anchors the initial analysis; without a renewal date only the real window applies.
+      state.view = hasRenewalDate() ? "period" : hasCurrentWindow() ? "cycle" : "";
 
       state.loading = false;
       render();
@@ -4145,7 +4029,22 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state.open) closePanel();
+    if (!state.open) return;
+    if (e.key === "Escape") closePanel();
+    if (e.key !== "Tab") return;
+    const panel = state.root?.querySelector(".panel");
+    const controls = [...(panel?.querySelectorAll('button, input, summary, [tabindex="0"]') || [])]
+      .filter((el) => !el.disabled && el.checkVisibility());
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    const active = state.root?.activeElement;
+    if (e.shiftKey && (active === first || active === panel)) {
+      e.preventDefault();
+      last?.focus();
+    } else if (!e.shiftKey && (active === last || active === panel)) {
+      e.preventDefault();
+      first?.focus();
+    }
   });
 
   mount();
